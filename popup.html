@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>eBay Laptop Helper</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="logo">₴</div>
+        <div>
+          <h1>eBay Laptop Helper</h1>
+          <p>Каталог і сторінка конкретного товару</p>
+        </div>
+      </header>
+
+      <label class="toggle master-toggle">
+        <input id="enabled" name="enabled" type="checkbox">
+        <span>Увімкнути розширення на eBay</span>
+      </label>
+
+      <section class="formula" aria-label="Формула розрахунку">
+        <strong>Формула</strong>
+        <span>((USD + доставка) × <b id="markupFactor">1,10</b> + $<b id="feePreview">30</b>) × <b id="ratePreview">46</b></span>
+        <small id="examplePreview">Наприклад, $300 + $20 доставка → ≈ 17 572 грн</small>
+      </section>
+
+      <form id="settingsForm">
+        <div class="grid">
+          <label>
+            Курс USD, ₴
+            <input id="usdRate" name="usdRate" type="number" min="0.01" max="1000" step="0.01" required>
+          </label>
+          <label>
+            Націнка, %
+            <input id="markupPercent" name="markupPercent" type="number" min="0" max="500" step="0.1" required>
+          </label>
+          <label class="wide">
+            Додаткові витрати, $
+            <input id="fixedFeeUsd" name="fixedFeeUsd" type="number" min="0" max="100000" step="0.01" required>
+          </label>
+        </div>
+
+        <fieldset>
+          <legend>Кольори за повною ціною</legend>
+          <label class="threshold green">
+            <span>Зелений — до</span>
+            <input id="greenMaxUah" name="greenMaxUah" type="number" min="0" max="10000000" step="100" required>
+            <span>₴</span>
+          </label>
+          <label class="threshold yellow">
+            <span>Жовтий — до</span>
+            <input id="yellowMaxUah" name="yellowMaxUah" type="number" min="0" max="10000000" step="100" required>
+            <span>₴</span>
+          </label>
+          <p class="hint"><i class="red-dot"></i> Дорожчі товари будуть червоними.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Кольори назв товарів</legend>
+          <div class="color-grid">
+            <label class="color-option green">
+              <span>Дешеві</span>
+              <input id="greenTitleColor" name="greenTitleColor" type="color">
+            </label>
+            <label class="color-option yellow">
+              <span>Середні</span>
+              <input id="yellowTitleColor" name="yellowTitleColor" type="color">
+            </label>
+            <label class="color-option red">
+              <span>Дорогі</span>
+              <input id="redTitleColor" name="redTitleColor" type="color">
+            </label>
+          </div>
+          <p class="hint">Колір ціни залишається стандартним; змінюється лише назва.</p>
+        </fieldset>
+
+        <label>
+          Бажані слова в назві
+          <textarea id="preferredKeywords" name="preferredKeywords" rows="2" placeholder="ThinkPad, Ryzen 7, RTX"></textarea>
+          <small>Збіги будуть позначені синім підкресленням. Розділяйте слова комами.</small>
+        </label>
+
+        <label>
+          Небажані слова в назві
+          <textarea id="excludedKeywords" name="excludedKeywords" rows="2" placeholder="parts, repair, broken"></textarea>
+          <small>Такі картки стануть напівпрозорими.</small>
+        </label>
+
+        <label class="toggle">
+          <input id="markNewItems" name="markNewItems" type="checkbox">
+          <span>Позначати нові товари протягом 24 годин</span>
+        </label>
+        <label class="toggle">
+          <input id="showConvertedPrice" name="showConvertedPrice" type="checkbox">
+          <span>Показувати розрахунок у гривнях</span>
+        </label>
+        <label class="toggle">
+          <input id="showSoldSearch" name="showSoldSearch" type="checkbox">
+          <span>Показувати пошук завершених продажів SOLD</span>
+        </label>
+        <label class="toggle">
+          <input id="showRiskBadges" name="showRiskBadges" type="checkbox">
+          <span>Попереджати про ризикові слова в назві</span>
+        </label>
+        <label class="toggle">
+          <input id="showItemPagePanel" name="showItemPagePanel" type="checkbox">
+          <span>Показувати помічник на сторінці товару</span>
+        </label>
+
+        <div class="actions">
+          <button type="button" id="resetButton" class="secondary">Типові значення</button>
+          <button type="submit" class="primary">Зберегти</button>
+        </div>
+        <p id="status" role="status" aria-live="polite"></p>
+      </form>
+    </main>
+    <script src="core.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

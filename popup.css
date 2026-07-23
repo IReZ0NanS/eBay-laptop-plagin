@@ -1,0 +1,234 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #172033;
+  background: #f5f7fb;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  width: 380px;
+  margin: 0;
+  background: #f5f7fb;
+}
+
+main { padding: 16px; }
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 13px;
+}
+
+.logo {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1565c0, #00a650);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  box-shadow: 0 5px 14px rgba(21, 101, 192, 0.24);
+}
+
+h1 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+header p {
+  margin: 3px 0 0;
+  color: #647188;
+  font-size: 12px;
+}
+
+.formula {
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  margin-bottom: 14px;
+  border: 1px solid #d7e3f6;
+  border-radius: 10px;
+  background: #eef5ff;
+  font-size: 13px;
+}
+
+.master-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid #bcd3ef;
+  border-radius: 10px;
+  background: #f1f7ff;
+  color: #0d4f9c;
+  font-size: 13px;
+}
+
+.master-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #1565c0;
+}
+
+.formula strong { color: #0d47a1; }
+.formula small { color: #4d6380; }
+
+form { display: grid; gap: 12px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.wide { grid-column: 1 / -1; }
+
+label {
+  display: grid;
+  gap: 5px;
+  color: #303b4d;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+input[type="number"],
+textarea {
+  width: 100%;
+  border: 1px solid #c9d2df;
+  border-radius: 7px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  font-weight: 500;
+  outline: none;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.color-option {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border: 1px solid #dce2ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.color-option input[type="color"] {
+  width: 100%;
+  height: 31px;
+  padding: 2px;
+  border: 1px solid #c9d2df;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+input[type="number"] { height: 35px; padding: 6px 9px; }
+textarea { resize: vertical; padding: 8px 9px; }
+
+input:focus, textarea:focus {
+  border-color: #1565c0;
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.12);
+}
+
+fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 11px;
+  border: 1px solid #dce2ea;
+  border-radius: 9px;
+  background: #fff;
+}
+
+legend {
+  padding: 0 5px;
+  color: #303b4d;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.threshold {
+  position: relative;
+  grid-template-columns: 1fr 105px 14px;
+  align-items: center;
+}
+
+.threshold::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  position: absolute;
+  border-radius: 50%;
+}
+
+.threshold > span:first-child { padding-left: 16px; }
+.threshold.green::before { background: #14853b; }
+.threshold.yellow::before { background: #d89400; }
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: #647188;
+  font-size: 11px;
+}
+
+.red-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #c62828;
+}
+
+label small { color: #748096; font-weight: 450; }
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggle input { width: 16px; height: 16px; margin: 0; accent-color: #1565c0; }
+
+.actions { display: flex; justify-content: space-between; gap: 10px; }
+
+button {
+  min-height: 36px;
+  padding: 8px 13px;
+  border-radius: 8px;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.primary { flex: 1; background: #1565c0; color: #fff; }
+.primary:hover { background: #0d4f9c; }
+.secondary { border: 1px solid #c9d2df; background: #fff; color: #3f4a5c; }
+.secondary:hover { background: #f0f3f7; }
+
+#status {
+  min-height: 16px;
+  margin: -4px 0 0;
+  color: #14853b;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: right;
+}

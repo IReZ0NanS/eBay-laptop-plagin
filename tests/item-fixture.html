@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8">
+    <title>eBay Helper item page fixture</title>
+    <link rel="stylesheet" href="../content.css">
+    <style>
+      body { margin: 0; padding: 40px; background: #f5f5f5; font-family: Arial, sans-serif; }
+      #mainContent { max-width: 720px; padding: 28px; background: #fff; }
+      .x-price-primary { margin: 18px 0; font-size: 28px; font-weight: 700; }
+      .ux-labels-values--shipping { margin: 12px 0; }
+      .x-item-description { margin-top: 30px; padding: 18px; border: 1px solid #ddd; }
+    </style>
+  </head>
+  <body>
+    <main id="mainContent">
+      <h1 class="x-item-title__mainTitle">Lenovo Yoga 7 16 Ryzen 5 7535U 8GB 512GB SSD</h1>
+      <div class="x-price-section">
+        <div class="x-price-primary"><span class="ux-textspans">US $249.99</span></div>
+      </div>
+      <div class="ux-labels-values--shipping">Shipping: US $14.95</div>
+      <section class="x-item-description" data-testid="x-item-description">
+        <h2>Item description from the seller</h2>
+        <p>Condition: This unit has very little wear with only very few scratches on it. The unit is fully functional — keyboard, trackpad, touchscreen, hinge, and fingerprint reader all work properly, and the display shows no cracks or dead pixels. Battery is in decent shape — battery report shows 90%. Boots cleanly into a freshly installed Windows 11 Home.</p>
+        <h3>Specifications:</h3>
+        <p>Processor: AMD Ryzen 5 7535U – 6 cores / 12 threads, up to 4.6 GHz Boost</p>
+        <p>Memory: 8 GB LPDDR5</p>
+        <p>Storage: 512 GB WD NVMe SSD</p>
+        <p>Display: 16&quot; touchscreen, 360° convertible hinge</p>
+        <p>Operating System: Windows 11 Home</p>
+        <h3>What's included:</h3>
+        <p>Lenovo Yoga 7 16&quot; laptop</p>
+        <p>Original power cord</p>
+        <h3>What's not included:</h3>
+        <p>No box, no manuals, no recovery media</p>
+      </section>
+    </main>
+
+    <script>
+      history.replaceState({}, "", "/itm/Dell-Latitude-5420/123456789012");
+      window.chrome = {
+        storage: {
+          local: {
+            get(keys, callback) { callback({}); },
+            set(values, callback) { if (callback) callback(); }
+          },
+          onChanged: { addListener() {} }
+        }
+      };
+    </script>
+    <script src="../core.js"></script>
+    <script src="../translation.js"></script>
+    <script src="../content.js"></script>
+  </body>
+</html>

@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "eBay Laptop Helper",
+  "description": "Рахує повну ціну, читає й перекладає опис продавця, показує продані аналоги та ризики.",
+  "version": "1.8.0",
+  "permissions": [
+    "storage"
+  ],
+  "action": {
+    "default_title": "Налаштування eBay Laptop Helper",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.ebay.com/*"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "js": [
+        "core.js",
+        "translation.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.ebaydesc.com/*"
+      ],
+      "js": [
+        "description.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ]
+}

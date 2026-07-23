@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8">
+    <title>eBay Helper DOM fixture</title>
+    <link rel="stylesheet" href="../content.css">
+    <style>
+      body { font-family: Arial, sans-serif; padding: 30px; }
+      .brwrvr__item-results { display: grid; gap: 18px; padding: 0; }
+      .brwrvr__item-card { display: block; padding: 18px; border: 1px solid #ddd; }
+    </style>
+  </head>
+  <body>
+    <ul class="brwrvr__item-results brwrvr__item-results--gallery">
+      <li class="brwrvr__item-card brwrvr__item-card--gallery">
+        <div class="brwrvr__item-card__body">
+          <a class="s-card__link" href="https://www.ebay.com/itm/Lenovo-ThinkPad/123456789012">
+            <h3 class="s-card__title">Lenovo ThinkPad T14 Ryzen 7</h3>
+          </a>
+          <span class="s-card__price">US $249.99</span>
+          <span class="s-card__shipping">+$14.95 shipping</span>
+        </div>
+      </li>
+      <li class="brwrvr__item-card brwrvr__item-card--gallery">
+        <div class="brwrvr__item-card__body">
+          <a class="s-item__link" href="https://www.ebay.com/itm/123456789013">
+            <h3 class="s-item__title">HP EliteBook 840 G8</h3>
+          </a>
+          <span class="s-item__price">$399.00</span>
+          <span class="s-item__shipping">Free shipping</span>
+        </div>
+      </li>
+      <li class="brwrvr__item-card brwrvr__item-card--gallery" data-item-id="123456789014">
+        <div class="brwrvr__item-card__body">
+          <a data-testid="item-title" href="https://www.ebay.com/viewitem?itemId=123456789014">
+            Dell Latitude 7420
+          </a>
+          <meta itemprop="price" content="199.95">
+        </div>
+      </li>
+    </ul>
+
+    <script>
+      window.chrome = {
+        storage: {
+          local: {
+            get(keys, callback) { callback({}); },
+            set(values, callback) { if (callback) callback(); }
+          },
+          onChanged: { addListener() {} }
+        }
+      };
+    </script>
+    <script src="../core.js"></script>
+    <script src="../translation.js"></script>
+    <script src="../content.js"></script>
+  </body>
+</html>
