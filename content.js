@@ -7,25 +7,23 @@
   globalThis.__ebayLaptopHelperLoaded = true;
 
   const SETTINGS_KEY = "ebayLaptopHelperSettings";
-  const SEEN_KEY = "ebayLaptopHelperSeenItems";
-  const INITIALIZED_KEY = "ebayLaptopHelperInitialized";
   const NEW_ITEM_TTL_MS = 24 * 60 * 60 * 1000;
-  const SEEN_ITEM_TTL_MS = 60 * 24 * 60 * 60 * 1000;
-  const MAX_SEEN_ITEMS = 2500;
   const DESCRIPTION_MESSAGE_TYPE = "EBAY_LAPTOP_HELPER_SELLER_DESCRIPTION";
   const MAX_DESCRIPTION_LENGTH = 100000;
 
   let settings = Core.sanitizeSettings(Core.DEFAULTS);
-  let seenItems = {};
   const sellerDescriptions = new Map();
+  const frameDescriptions = new Set();
   const sellerDescriptionTranslations = new Map();
   const sellerDescriptionTranslationModes = new Map();
   const sellerDescriptionTranslationJobs = new Map();
-  let initialized = false;
   let ready = false;
   let scanTimer = null;
-  let persistTimer = null;
   let scanInProgress = false;
+  let historyRecords = {};
+  let historyPending = false;
+  let historySignature = "";
+  let lastDescriptionRequest = 0;
 
   function normalizedText(element) {
     return String(element?.textContent || "").replace(/\s+/g, " ").trim();
@@ -367,13 +365,14 @@
       }
     }
 
-    return best.length >= 20 ? best : "";
+    return best;
   }
 
   function sellerDescriptionForItem(itemId) {
     const cached = sellerDescriptions.get(itemId);
+    if (frameDescriptions.has(itemId) && cached) return cached;
     const inline = findInlineSellerDescription();
-    if (inline && (!cached || inline.length > cached.length)) {
+    if (inline && inline !== cached) {
       rememberSellerDescription(itemId, inline);
       return inline;
     }
@@ -382,7 +381,7 @@
 
   function descriptionSignature(text) {
     const value = String(text || "");
-    return `${value.length}|${value.slice(0, 180)}|${value.slice(-180)}`;
+    return `${value.length}|${stableHash(value)}`;
   }
 
   function rememberSellerDescription(itemId, text) {
@@ -406,14 +405,16 @@
   function receiveSellerDescription(event) {
     const data = event.data;
     if (!isTrustedDescriptionOrigin(event.origin)) return;
+    if (!Array.from(document.querySelectorAll("iframe")).some(frame => frame.contentWindow === event.source)) return;
     if (!data || data.source !== "ebay-laptop-helper" || data.type !== DESCRIPTION_MESSAGE_TYPE) return;
 
     const itemId = String(data.itemId || "");
     if (!/^[0-9]{9,15}$/.test(itemId) || itemId !== currentItemPageId()) return;
     const text = normalizeSellerDescription(data.text);
-    if (text.length < 20 || sellerDescriptions.get(itemId) === text) return;
+    if (!text || sellerDescriptions.get(itemId) === text) return;
 
     rememberSellerDescription(itemId, text);
+    frameDescriptions.add(itemId);
     while (sellerDescriptions.size > 25) sellerDescriptions.delete(sellerDescriptions.keys().next().value);
     scheduleScan(0);
   }
@@ -429,6 +430,13 @@
     const shippingResult = findItemPageShipping();
     const sellerDescription = sellerDescriptionForItem(itemId);
     const descriptionInfo = Core.extractSellerDescriptionInfo(sellerDescription);
+    const specifics = Array.from(document.querySelectorAll(".ux-layout-section-evo__item--itemSpecifics, .ux-layout-section__item--itemSpecifics, [data-testid='ux-layout-section-evo__item--itemSpecifics']"))
+      .map(node => node.innerText || node.textContent || "").join("\n");
+    const inspection = globalThis.EbayLaptopInspection.inspect([
+      { kind: "title", label: "Назва", text: titleResult.text },
+      { kind: "specifics", label: "Характеристики eBay", text: specifics },
+      { kind: "description", label: "Опис продавця", text: sellerDescription }
+    ]);
     const shipping = shippingResult
       ? { usd: shippingResult.shipping.usd, isFree: shippingResult.shipping.isFree, known: true }
       : { usd: 0, isFree: false, known: false };
@@ -442,6 +450,7 @@
       shipping,
       sellerDescription,
       descriptionInfo,
+      inspection,
       risk: Core.assessListingRisk([
         titleResult.text,
         sellerDescription,
@@ -559,7 +568,7 @@
 
   function translationErrorMessage(error) {
     if (error?.code === "api-unavailable") {
-      return "Переклад недоступний у цій версії Chrome. Оновіть Chrome до версії 138 або новішої.";
+      return "Вбудований перекладач недоступний у цьому браузері або контексті сторінки. Перевірте оновлення Chrome; оригінал опису доступний нижче.";
     }
     if (error?.code === "language-pair-unavailable") {
       return "Вбудований переклад з англійської на українську недоступний на цьому комп'ютері.";
@@ -698,6 +707,7 @@
       shipping: result.shipping,
       sellerDescription: descriptionSignature(result.sellerDescription),
       descriptionInfo: result.descriptionInfo,
+      inspection: result.inspection,
       translationView,
       risk: result.risk,
       tier,
@@ -752,7 +762,7 @@
       }
     }
 
-    appendSellerDescriptionInfo(panel, result, translationView);
+
 
     if (preferred || excluded) {
       const keywordSignals = document.createElement("div");
@@ -775,7 +785,7 @@
     if (settings.showRiskBadges) {
       const risk = document.createElement("div");
       risk.className = "ebay-helper-item-risk";
-      if (!result.sellerDescription) {
+      if (!result.sellerDescription && !result.risk.flags.length) {
         risk.dataset.level = "medium";
         risk.textContent = "Аналіз ризиків очікує Item description from the seller";
       } else if (result.risk.level === "low") {
@@ -786,8 +796,12 @@
         const prefix = result.risk.level === "high" ? "РИЗИК" : "УВАГА";
         risk.textContent = `${prefix}: ${result.risk.flags.map((flag) => flag.label).join("; ")}`;
       }
+      risk.title = result.risk.flags.map(flag => flag.label + ': “' + flag.evidence + '”').join("\n");
       panel.append(risk);
     }
+
+    appendSellerDescriptionInfo(panel, result, translationView);
+    appendInspection(panel, result);
 
     const actions = document.createElement("div");
     actions.className = "ebay-helper-item-actions";
@@ -824,6 +838,23 @@
     if (!anchor || anchor.tagName === "META") anchor = result.priceElement.parentElement;
     if (!anchor?.parentElement) return;
 
+    if (existing?.dataset.itemId === result.itemId) {
+      const previousDetails = Array.from(existing.querySelectorAll("details"));
+      panel.querySelectorAll("details").forEach((details, index) => {
+        const previous = previousDetails[index];
+        if (!previous) return;
+        details.open = previous.open;
+        const draft = previous.querySelector("textarea");
+        if (draft) {
+          const copy = draft.cloneNode(true);
+          copy.value = draft.value;
+          details.append(copy);
+        }
+        const input = previous.querySelector("input");
+        const replacement = details.querySelector("input");
+        if (input && replacement) { replacement.value = input.value; replacement.dispatchEvent(new Event("input")); }
+      });
+    }
     existing?.remove();
     anchor.insertAdjacentElement("afterend", panel);
   }
@@ -915,7 +946,7 @@
     }
     badge.dataset.level = risk.level;
     badge.textContent = risk.level === "high" ? "РИЗИК" : "УВАГА";
-    const details = risk.flags.map((flag) => flag.label).join("; ");
+    const details = risk.flags.map((flag) => `${flag.label}: «${flag.evidence}»`).join("; ");
     badge.title = `Знайдено в назві: ${details}. Перевірте опис і фото перед купівлею.`;
     badge.setAttribute("aria-label", `${badge.textContent}: ${details}`);
   }
@@ -956,10 +987,14 @@
       excluded,
       risk,
       isNew,
-      settings
+      settings,
+      history: historyRecords[itemId]
     });
 
-    if (card.dataset.ebayHelperSignature === signature) return;
+    if (card.dataset.ebayHelperSignature === signature && priceElement.classList.contains("ebay-helper-price")
+      && titleElement.classList.contains("ebay-helper-title")
+      && ownedElement(card, "data-ebay-helper-olx", itemId)
+      && (!settings.showConvertedPrice || ownedElement(card, "data-ebay-helper-converted", itemId))) return;
     removeStaleOwnedElements(card, itemId);
     card.dataset.ebayHelperSignature = signature;
     card.dataset.ebayHelperItemId = itemId;
@@ -984,24 +1019,26 @@
     upsertSoldLink(card, priceElement, itemId, title);
     upsertRiskBadge(card, titleElement, itemId, risk);
     upsertNewBadge(card, titleElement, itemId, isNew);
-  }
-
-  function cleanSeenItems(now) {
-    const recent = Object.entries(seenItems)
-      .filter(([, timestamp]) => timestamp === 0 || now - Number(timestamp) <= SEEN_ITEM_TTL_MS)
-      .sort((a, b) => Number(b[1]) - Number(a[1]))
-      .slice(0, MAX_SEEN_ITEMS);
-    seenItems = Object.fromEntries(recent);
-  }
-
-  function persistSeenSoon() {
-    clearTimeout(persistTimer);
-    persistTimer = setTimeout(() => {
-      chrome.storage.local.set({
-        [SEEN_KEY]: seenItems,
-        [INITIALIZED_KEY]: true
-      });
-    }, 400);
+    const newBadge = ownedElement(card, "data-ebay-helper-new", itemId);
+    const record = historyRecords[itemId];
+    if (newBadge) {
+      const fresh = record?.firstSeen > Date.now() - 60000;
+      newBadge.dataset.fresh = String(fresh);
+      newBadge.title = "Вперше побачено плагіном: " + (record?.firstSeen ? new Date(record.firstSeen).toLocaleString("uk-UA") : "щойно") + ". Це не дата публікації eBay.";
+    }
+    let changed = ownedElement(card, "data-ebay-helper-price-change", itemId);
+    if (record?.changedAt > Date.now() - NEW_ITEM_TTL_MS) {
+      if (!changed) {
+        changed = document.createElement("span");
+        changed.dataset.ebayHelperOwned = "true";
+        changed.dataset.ebayHelperPriceChange = "true";
+        changed.dataset.itemId = itemId;
+        changed.className = "ebay-helper-price-change";
+        priceElement.insertAdjacentElement("afterend", changed);
+      }
+      changed.textContent = record.price < record.previousPrice ? "↓ ЦІНА" : "↑ ЦІНА";
+      changed.title = `Ціна товару: ${record.previousPrice} → ${record.price}. Доставка не врахована.`;
+    } else changed?.remove();
   }
 
   function collectResults() {
@@ -1076,9 +1113,107 @@
     document.querySelectorAll(".ebay-helper-price").forEach((element) => {
       element.classList.remove("ebay-helper-price", "ebay-helper-price-green", "ebay-helper-price-yellow", "ebay-helper-price-red");
     });
-    document.querySelectorAll("[data-ebay-helper-converted], [data-ebay-helper-new], [data-ebay-helper-olx], [data-ebay-helper-sold], [data-ebay-helper-risk]").forEach((element) => element.remove());
+    document.querySelectorAll("[data-ebay-helper-converted], [data-ebay-helper-new], [data-ebay-helper-olx], [data-ebay-helper-sold], [data-ebay-helper-risk], [data-ebay-helper-price-change]").forEach((element) => element.remove());
     clearItemPagePanel();
     document.getElementById("ebay-laptop-helper-status")?.remove();
+  }
+
+  function observeHistory(results) {
+    if (historyPending || !results.length) return;
+    const items = results.filter(result => /^[0-9]{9,15}$/.test(result.itemId))
+      .map(result => ({ id: result.itemId, price: result.price.isRange ? undefined : result.price.maxUsd }));
+    if (!items.length) return;
+    const url = new URL(location.href);
+    const scopeParams = new URLSearchParams();
+    for (const key of ["_nkw", "_sacat", "LH_BIN", "LH_Auction", "LH_ItemCondition", "_udlo", "_udhi"])
+      if (url.searchParams.has(key)) scopeParams.set(key, url.searchParams.get(key));
+    const scope = url.pathname + "?" + scopeParams;
+    const signature = JSON.stringify({ scope, items });
+    if (signature === historySignature) return;
+    historyPending = true;
+    chrome.runtime.sendMessage({ type: "EBAY_HELPER_OBSERVE", scope, items }, response => {
+      historyPending = false;
+      if (chrome.runtime.lastError || response?.error || !response?.items) {
+        console.warn("eBay Helper: history could not be saved", chrome.runtime.lastError?.message || response?.error);
+        return;
+      }
+      historySignature = signature;
+      historyRecords = { ...historyRecords, ...response.items };
+      scheduleScan(0);
+    });
+  }
+
+  function appendInspection(panel, result) {
+    const inspection = result.inspection;
+    for (const conflict of inspection.conflicts) {
+      const notice = document.createElement("div");
+      notice.className = "ebay-helper-item-notice ebay-helper-translation-error";
+      notice.textContent = `Суперечність — ${conflict.label}: ` + conflict.values.map(value => `${value.source}: ${value.value}`).join("; ");
+      panel.append(notice);
+    }
+    const details = document.createElement("details");
+    details.className = "ebay-helper-review";
+    const summary = document.createElement("summary");
+    summary.textContent = `Перед купівлею · ${inspection.checks.filter(check => !check.found).length} пунктів потребують уточнення`;
+    details.append(summary);
+    for (const check of inspection.checks) appendItemPageRow(details, check.label, check.found ? "Є згадка — перевірте зміст" : "Даних недостатньо");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ebay-helper-translation-toggle";
+    button.textContent = "Підготувати питання англійською";
+    button.disabled = !inspection.questions.length;
+    button.addEventListener("click", () => {
+      let draft = details.querySelector("textarea");
+      if (!draft) {
+        draft = document.createElement("textarea");
+        draft.rows = 8;
+        draft.setAttribute("aria-label", "Питання продавцю — можна редагувати й скопіювати");
+        draft.value = `Hello! I am interested in this laptop (item ${result.itemId}). Could you please clarify:\n\n` + inspection.questions.map((question,index) => `${index+1}. ${question}`).join("\n") + "\n\nThank you!";
+        details.append(draft);
+      }
+      draft.focus(); draft.select();
+    });
+    details.append(button);
+    panel.append(details);
+    if (result.sellerDescription) {
+      const full = document.createElement("details");
+      full.className = "ebay-helper-review";
+      const heading = document.createElement("summary");
+      heading.textContent = "Повний текст опису продавця";
+      const body = document.createElement("div");
+      body.className = "ebay-helper-full-description";
+      body.textContent = result.sellerDescription;
+      full.append(heading, body);
+      panel.append(full);
+    }
+    const search = document.createElement("details");
+    search.className = "ebay-helper-review";
+    const heading = document.createElement("summary");
+    heading.textContent = "Уточнити пошук аналогів";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.setAttribute("aria-label", "Запит для пошуку аналогів");
+    input.value = Core.buildEbaySoldSearchQuery(result.title);
+    const model = document.createElement("button");
+    model.type = "button";
+    model.textContent = "Лише модель";
+    const config = document.createElement("button");
+    config.type = "button";
+    config.textContent = "Комплектація";
+    const olx = itemPageAction("OLX", "", "ebay-helper-item-action", "Пошук за введеним запитом");
+    const sold = itemPageAction("SOLD", "", "ebay-helper-item-action", "Пошук за введеним запитом");
+    const update = () => {
+      const query = input.value.trim();
+      olx.href = `https://www.olx.ua/uk/elektronika/noutbuki-i-aksesuary/noutbuki/q-${encodeURIComponent(query).replace(/%20/g,"-")}/`;
+      sold.href = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&_sacat=177&LH_Sold=1&LH_Complete=1&_sop=13`;
+    };
+    input.addEventListener("input", update);
+    model.addEventListener("click", () => { input.value = Core.buildOlxSearchQuery(result.title, false); update(); });
+    config.addEventListener("click", () => { input.value = Core.buildEbaySoldSearchQuery(result.title); update(); });
+    update();
+    search.append(heading, model, config, input, olx);
+    if (settings.showSoldSearch) search.append(sold);
+    panel.append(search);
   }
 
   function scan() {
@@ -1115,30 +1250,23 @@
       const collected = collectResults();
       const { cardCount, results } = collected;
       updateStatus(cardCount, results.length, itemPageState);
-      let seenChanged = false;
-
-      if (!initialized && results.length > 0) {
-        for (const result of results) seenItems[result.itemId] = 0;
-        initialized = true;
-        seenChanged = true;
-      } else {
-        for (const result of results) {
-          if (!Object.prototype.hasOwnProperty.call(seenItems, result.itemId)) {
-            seenItems[result.itemId] = now;
-            seenChanged = true;
-          }
-        }
-      }
-
       for (const result of results) {
-        const firstSeen = Number(seenItems[result.itemId]);
-        const isNew = firstSeen > 0 && now - firstSeen <= NEW_ITEM_TTL_MS;
-        styleCard(result, isNew);
+        const firstSeen = Number(historyRecords[result.itemId]?.firstSeen || 0);
+        styleCard(result, firstSeen > 0 && now - firstSeen <= NEW_ITEM_TTL_MS);
       }
-
-      if (seenChanged) {
-        cleanSeenItems(now);
-        persistSeenSoon();
+      if (!itemPageId) observeHistory(results);
+      if (itemPageId && now - lastDescriptionRequest > 2000) {
+        lastDescriptionRequest = now;
+        document.querySelectorAll("iframe").forEach(frame => {
+          try {
+            const origin = new URL(frame.src).origin;
+            // The frame's src is its destination, not necessarily its current origin:
+            // a lazy/loading frame can still be about:blank (inheriting ebay.com).
+            // This data-free request may cross that transition. Responses remain
+            // restricted to ebaydesc.com, this frame's window and the current item ID.
+            if (isTrustedDescriptionOrigin(origin)) frame.contentWindow?.postMessage({ type: "EBAY_HELPER_REQUEST_DESCRIPTION" }, "*");
+          } catch {}
+        });
       }
     } finally {
       scanInProgress = false;
@@ -1146,8 +1274,9 @@
   }
 
   function scheduleScan(delay = 250) {
+    if (scanTimer !== null && delay !== 0) return;
     clearTimeout(scanTimer);
-    scanTimer = setTimeout(scan, delay);
+    scanTimer = setTimeout(() => { scanTimer = null; scan(); }, delay);
   }
 
   const observer = new MutationObserver((mutations) => {
@@ -1155,15 +1284,16 @@
       const target = mutation.target.nodeType === Node.ELEMENT_NODE
         ? mutation.target
         : mutation.target.parentElement;
-      return Boolean(target?.closest?.("[data-ebay-helper-owned='true']"));
+      if (target?.closest?.("[data-ebay-helper-owned='true']")) return true;
+      const nodes = [...mutation.addedNodes || [], ...mutation.removedNodes || []];
+      return nodes.length > 0 && nodes.every(node => node.nodeType === Node.ELEMENT_NODE && node.matches?.("[data-ebay-helper-owned='true']"));
     });
     if (!onlyHelperChanges) scheduleScan();
   });
 
-  chrome.storage.local.get([SETTINGS_KEY, SEEN_KEY, INITIALIZED_KEY], (stored) => {
+  chrome.storage.local.get([SETTINGS_KEY], (stored) => {
     settings = Core.sanitizeSettings(stored[SETTINGS_KEY]);
-    seenItems = stored[SEEN_KEY] && typeof stored[SEEN_KEY] === "object" ? stored[SEEN_KEY] : {};
-    initialized = stored[INITIALIZED_KEY] === true;
+
     ready = true;
 
     observer.observe(document.documentElement, {
@@ -1172,6 +1302,10 @@
       characterData: true
     });
     scan();
+    if (currentItemPageId()) {
+      setTimeout(() => scheduleScan(0), 2200);
+      setTimeout(() => scheduleScan(0), 5000);
+    }
   });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {

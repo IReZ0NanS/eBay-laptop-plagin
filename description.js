@@ -25,27 +25,38 @@
     return text.slice(0, MAX_DESCRIPTION_LENGTH);
   }
 
-  function sendDescription() {
+  function sendDescription(force = false, requestedOrigin = "") {
     const itemId = itemIdFromLocation();
     const text = descriptionText();
-    if (!itemId || text.length < 20) return;
+    if (!itemId || !text) return;
 
-    const signature = `${itemId}|${text.length}|${text.slice(0, 160)}|${text.slice(-160)}`;
-    if (signature === lastSignature) return;
+    const signature = `${itemId}|${text}`;
+    if (!force && signature === lastSignature) return;
     lastSignature = signature;
 
+    let targetOrigin;
+    try {
+      targetOrigin = requestedOrigin || new URL(document.referrer).origin;
+      if (!/^https:\/\/(?:[a-z0-9-]+\.)*ebay\.com$/i.test(targetOrigin)) return;
+    } catch { return; }
     window.top.postMessage({
       source: "ebay-laptop-helper",
       type: MESSAGE_TYPE,
       itemId,
       text
-    }, "*");
+    }, targetOrigin);
   }
 
   function scheduleSend(delay = 250) {
-    clearTimeout(sendTimer);
-    sendTimer = setTimeout(sendDescription, delay);
+    if (sendTimer !== null) return;
+    sendTimer = setTimeout(() => { sendTimer = null; sendDescription(); }, delay);
   }
+
+  window.addEventListener("message", event => {
+    if (event.source !== window.top || event.data?.type !== "EBAY_HELPER_REQUEST_DESCRIPTION") return;
+    if (!/^https:\/\/(?:[a-z0-9-]+\.)*ebay\.com$/i.test(event.origin)) return;
+    sendDescription(true, event.origin);
+  });
 
   const observer = new MutationObserver(() => scheduleSend());
   observer.observe(document.documentElement, {

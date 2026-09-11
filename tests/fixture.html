@@ -42,6 +42,7 @@
 
     <script>
       window.chrome = {
+        runtime: { sendMessage(message, callback) { callback({ items: {} }); } },
         storage: {
           local: {
             get(keys, callback) { callback({}); },
@@ -52,6 +53,7 @@
       };
     </script>
     <script src="../core.js"></script>
+    <script src="../inspection.js"></script>
     <script src="../translation.js"></script>
     <script src="../content.js"></script>
   </body>

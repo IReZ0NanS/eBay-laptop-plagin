@@ -186,7 +186,7 @@
     return price.isRange ? `≈ ${formatUah(min)} – ${formatUah(max)}` : `≈ ${formatUah(max)}`;
   }
 
-  function buildOlxSearchQuery(title) {
+  function buildOlxSearchQuery(title, includeProcessor = true) {
     let query = String(title || "")
       .replace(/^\s*new listing\s*/i, "")
       .replace(/[([{]\s*#?\d+\s*[)\]}]/g, " ")
@@ -213,9 +213,13 @@
     const processorPattern = /\b(?:(?:intel\s+)?core\s+ultra\s+[3579]\s+\d{3,5}[a-z0-9]{0,4}|(?:intel\s+)?core\s+i[3579](?:[-\s]\d{3,5}[a-z0-9]{0,4})?|i[3579]-\d{3,5}[a-z0-9]{0,4}|(?:amd\s+)?ryzen\s+[3579](?:\s+pro)?\s+\d{3,5}[a-z0-9]{0,4}|(?:intel\s+)?(?:celeron|pentium)\s+[a-z]?\d{3,5}[a-z0-9]{0,3}|(?:apple\s+)?m[1-5](?:\s+(?:pro|max|ultra))?|(?:qualcomm\s+)?snapdragon\s+x\s+(?:elite|plus))\b/i;
     const processor = query.match(processorPattern);
     if (processor && typeof processor.index === "number") {
-      query = query.slice(0, processor.index + processor[0].length).trim();
+      const tail = query.slice(processor.index + processor[0].length);
+      if (!/\b(?:acer|apple|asus|dell|hp|lenovo|microsoft|msi|razer|samsung|toshiba)\b/i.test(tail)) {
+        query = query.slice(0, processor.index + processor[0].length).trim();
+      }
     }
 
+    if (!includeProcessor && processor) query = query.replace(processor[0], " ").replace(/\s+/g, " ").trim();
     return (query || "ноутбук").slice(0, 140).trim();
   }
 
@@ -231,7 +235,8 @@
 
     // The OLX query intentionally stops after the processor. For sold eBay
     // comparisons, keep the first two capacities as the usual RAM/SSD pair.
-    const capacities = source.match(/\b\d+(?:\.\d+)?\s*(?:gb|tb)\b/gi) || [];
+    const capacitySource = source.replace(/\b(?:rtx|gtx|radeon(?:\s+rx)?)\s*\d{3,4}[a-z]*(?:\s*ti)?\s+\d+\s*gb\b/gi, " ");
+    const capacities = capacitySource.match(/\b\d+(?:\.\d+)?\s*(?:gb|tb)\b/gi) || [];
     for (const capacity of capacities) {
       const normalized = capacity.replace(/\s+/g, "").toUpperCase();
       if (!additions.some((value) => value.toUpperCase() === normalized)) additions.push(normalized);
@@ -262,7 +267,7 @@
       .replace(/\b(?:no|without)\s+(?:visible\s+)?(?:cracks?|dead\s+pixels?|liquid\s+damage|water\s+damage)\b/gi, " ");
     const rules = [
       { code: "parts", severity: "high", label: "На запчастини", pattern: /\b(?:for\s+parts|parts\s+only|parts\s+or\s+repair|not\s+working)\b/i },
-      { code: "power", severity: "high", label: "Не вмикається", pattern: /\b(?:no\s+power(?!\s+(?:adapter|supply|cord))|does\s+not\s+power\s+on|won['’]?t\s+(?:power|turn)\s+on|dead\s+unit)\b/i },
+      { code: "power", severity: "high", label: "Не вмикається", pattern: /\b(?:does\s+not\s+turn\s+on|no\s+power(?!\s+(?:adapter|supply|cord))|does\s+not\s+power\s+on|won['’]?t\s+(?:power|turn)\s+on|dead\s+unit)\b/i },
       {
         code: "locks",
         severity: "high",
@@ -275,7 +280,8 @@
       { code: "description", severity: "medium", label: "Перевір опис", pattern: /\b(?:read\s+(?:the\s+)?description|see\s+description)\b/i },
       { code: "storage", severity: "medium", label: "Без накопичувача", pattern: /\b(?:no|missing|without)\s+(?:ssd|hdd|hard\s+drive|storage)\b/i },
       { code: "memory", severity: "medium", label: "Без RAM", pattern: /\b(?:no|missing|without)\s+(?:ram|memory)\b/i },
-      { code: "battery", severity: "medium", label: "Проблема з батареєю", pattern: /\b(?:(?:no|missing|without|bad|dead)\s+battery|battery\s+(?:issue|fault|not\s+included|does\s+not\s+hold\s+(?:a\s+)?charge))\b/i },
+      { code: "swollen", severity: "high", label: "Здута батарея", pattern: /\b(?:(?:swollen|swelling|bloated)\s+battery|battery\s+(?:is\s+)?(?:swollen|swelling|bloated))\b/i },
+      { code: "battery", severity: "medium", label: "Проблема з батареєю", pattern: /\b(?:(?:no|missing|without|bad|dead)\s+battery|battery\s+(?:swollen|swelling|bloated|dead|bad|issue|fault|not\s+included|does\s+not\s+hold\s+(?:a\s+)?charge))\b/i },
       { code: "display", severity: "medium", label: "Дефект екрана", pattern: /\b(?:screen\s+(?:issue|damage|crack(?:ed)?|lines?)|cracked\s+screen|dead\s+pixels?|white\s+spots?|lcd\s+(?:issue|damage|lines?))\b/i },
       { code: "hinge", severity: "medium", label: "Проблема з петлями", pattern: /\b(?:broken|damaged|loose)\s+hinge(?:s)?\b|\bhinge(?:s)?\s+(?:broken|damaged|loose)\b/i },
       { code: "keyboard", severity: "medium", label: "Проблема з клавіатурою", pattern: /\b(?:missing\s+keys?|keyboard\s+(?:issue|fault|not\s+working)|keys?\s+not\s+working)\b/i },
@@ -284,9 +290,18 @@
       { code: "lot", severity: "medium", label: "Лот із кількох пристроїв", pattern: /\b(?:lot\s+of\s+\d+|\d+\s*[x×]\s+(?:laptops?|notebooks?|computers?|pcs?))\b/i }
     ];
 
-    const flags = rules
-      .filter((rule) => rule.pattern.test(source) && !rule.excludePattern?.test(source))
-      .map(({ code, severity, label }) => ({ code, severity, label }));
+    const clauses = source.split(/(?:[.!?;\n]+|\bbut\b|\bhowever\b)/i).map(s => s.trim()).filter(Boolean);
+    const flags = rules.flatMap(rule => {
+      const evidence = clauses.find(clause => {
+        const checked = clause
+          .replace(/\b(?:no|without)\s+(?:bios|uefi|firmware|admin|icloud|activation|mdm)\s+(?:lock(?:ed)?|password)\b/gi, " ")
+          .replace(/\b(?:no|without)\s+broken\s+parts\b/gi, " ")
+          .replace(/\b(?:not|never)\s+(?:broken|damaged|cracked)\b/gi, " ");
+        return rule.pattern.test(checked);
+      });
+      if (rule.code === "battery" && /\b(?:swollen|swelling|bloated)\b/i.test(evidence || "")) return [];
+      return evidence ? [{ code: rule.code, severity: rule.severity, label: rule.label, evidence }] : [];
+    });
     const level = flags.some((flag) => flag.severity === "high")
       ? "high"
       : flags.length ? "medium" : "low";
@@ -321,7 +336,7 @@
     }
 
     function sentences(value) {
-      const matches = String(value || "").match(/[^.!?]+(?:[.!?]+|$)/g) || [];
+      const matches = String(value || "").split(/(?<=[.!?])\s+(?=[A-Z])/);
       return matches.map((sentence) => sentence.trim()).filter(Boolean);
     }
 
@@ -402,6 +417,7 @@
 
     let section = null;
     for (const line of lines) {
+      classifyImportantText(line);
       const heading = sectionHeading(line);
       if (heading) {
         section = heading.section;
@@ -416,6 +432,8 @@
         continue;
       }
 
+      if (/^(?:shipping|returns?|payment|warranty|terms|contact)(?:\s+(?:policy|information))?\s*:/i.test(line)) section = null;
+      if (!section && /^(?:processor|cpu|graphics|gpu|memory|ram|storage|display|screen|bios|operating system)\s*:/i.test(line)) addSpec(line);
       if (section) {
         consumeSectionLine(section, line);
       } else {

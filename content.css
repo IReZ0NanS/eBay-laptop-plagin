@@ -118,6 +118,16 @@
   vertical-align: middle !important;
 }
 
+.ebay-helper-new-badge[data-fresh="true"] { outline: 2px solid #ff9800 !important; outline-offset: 2px !important; }
+.ebay-helper-price-change { display: inline-block !important; margin-left: 5px !important; color: #174f99 !important; font: 700 10px/1.3 Arial, sans-serif !important; }
+.ebay-helper-review { margin-top: 10px !important; border-top: 1px solid #dfe5ec !important; padding-top: 8px !important; }
+.ebay-helper-review summary { cursor: pointer !important; font-weight: 700 !important; }
+.ebay-helper-review input, .ebay-helper-review textarea { display: block !important; box-sizing: border-box !important; width: 100% !important; margin: 8px 0 !important; padding: 7px !important; background: white !important; color: #172033 !important; border: 1px solid #aab8ca !important; font: 12px/1.4 Arial, sans-serif !important; }
+.ebay-helper-review button { margin: 7px 5px 3px 0 !important; cursor: pointer !important; }
+.ebay-helper-review button:not(.ebay-helper-translation-toggle) { background: #f1f7ff !important; color: #174f99 !important; padding: 5px 8px !important; border: 1px solid #aab8ca !important; border-radius: 6px !important; }
+.ebay-helper-review .ebay-helper-item-action { color: #174f99 !important; margin-right: 5px !important; }
+.ebay-helper-full-description { max-height: 320px !important; overflow: auto !important; white-space: pre-wrap !important; overflow-wrap: anywhere !important; margin-top: 8px !important; }
+
 #ebay-laptop-helper-item-panel {
   --ebay-helper-item-accent: #1565c0;
   --ebay-helper-item-soft: #eef5ff;
