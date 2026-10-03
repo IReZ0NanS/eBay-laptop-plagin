@@ -3,6 +3,8 @@
   const fields = { ram: "RAM", storage: "Накопичувач", cpu: "Процесор", gpu: "Відеокарта" };
   function facts(text) {
     const source = String(text || "")
+      .replace(/\b(?:RAM Size|Memory Size)\s*:?\s*/gi, "RAM: ")
+      .replace(/\b(?:SSD Capacity|Hard Drive Capacity)\s*:?\s*/gi, "Storage: ")
       .replace(/\b(RAM|Memory(?: Size)?|Storage|SSD|HDD|Processor|GPU)\s*:?\s*\n\s*/gi, "$1: ")
       .replace(/[\r\n]+/g, "; ");
     const out = {};
@@ -30,7 +32,7 @@
     }
     const description = sources.filter(source => source.kind !== "title").map(source => source.text).join("\n");
     const checks = [
-      { label: "Стан батареї", found: /\b(?:battery.{0,60}(?:\d+\s*%|health|cycles?|dead|swollen|holds?\s+(?:a\s+)?charge)|cycle count|full charge capacity)\b/i.test(description), question: "Could you share the battery health percentage and cycle count, or a battery report?" },
+      { label: "Стан батареї", found: /\b(?:battery.{0,60}(?:\d+\s*%|health|cycles?|dead|swollen|holds?\s+(?:a\s+)?charge)|cycle count|full charge capacity)/i.test(description), question: "Could you share the battery health percentage and cycle count, or a battery report?" },
       { label: "BIOS / MDM / Autopilot", found: /\b(?:bios|uefi).{0,30}(?:password|lock)/i.test(description) && /\b(?:mdm|autopilot|activation lock).{0,30}(?:no|not|free|removed|locked)|\b(?:no|without).{0,15}(?:mdm|autopilot|activation lock)/i.test(description), question: "Is this laptop free of BIOS/UEFI passwords, MDM, Windows Autopilot and activation locks?" },
       { label: "Зарядний пристрій", found: /\b(?:charger|ac adapter|power adapter|power cord)\b/i.test(description), question: "Is a compatible charger included, and what is its wattage?" },
       { label: "Стан екрана", found: /\b(?:screen|display|lcd|pixels).{0,70}(?:crack|damage|spot|line|work|good|perfect)|\b(?:no|without).{0,20}(?:cracks|dead pixels)/i.test(description), question: "Does the screen have any cracks, dead pixels, bright spots or lines?" },

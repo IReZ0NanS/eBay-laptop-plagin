@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "eBay Laptop Helper",
-  "description": "Рахує повну ціну, читає й перекладає опис продавця, показує продані аналоги та ризики.",
-  "version": "1.9.1",
+  "description": "Рахує орієнтовну повну ціну, читає й перекладає опис продавця та шукає аналоги на OLX і SOLD.",
+  "version": "1.10.0",
   "permissions": [
     "storage"
   ],
@@ -36,8 +36,5 @@
       "all_frames": true,
       "run_at": "document_idle"
     }
-  ],
-  "background": {
-    "service_worker": "background.js"
-  }
+  ]
 }

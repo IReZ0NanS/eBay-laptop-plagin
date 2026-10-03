@@ -7,6 +7,7 @@
   const MAX_DESCRIPTION_LENGTH = 100000;
   let sendTimer = null;
   let lastSignature = "";
+  let active = true;
 
   function itemIdFromLocation() {
     const queryMatch = location.href.match(/[?&](?:item|itemid|item_id|_itemid)=([0-9]{9,15})(?:[&#]|$)/i);
@@ -26,13 +27,13 @@
   }
 
   function sendDescription(force = false, requestedOrigin = "") {
+    if (!active || document.hidden) return;
     const itemId = itemIdFromLocation();
     const text = descriptionText();
     if (!itemId || !text) return;
 
     const signature = `${itemId}|${text}`;
     if (!force && signature === lastSignature) return;
-    lastSignature = signature;
 
     let targetOrigin;
     try {
@@ -45,9 +46,11 @@
       itemId,
       text
     }, targetOrigin);
+    lastSignature = signature;
   }
 
   function scheduleSend(delay = 250) {
+    if (!active || document.hidden) return;
     if (sendTimer !== null) return;
     sendTimer = setTimeout(() => { sendTimer = null; sendDescription(); }, delay);
   }
@@ -59,11 +62,31 @@
   });
 
   const observer = new MutationObserver(() => scheduleSend());
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    characterData: true
-  });
+  function syncObservation() {
+    observer.disconnect?.();
+    clearTimeout(sendTimer);
+    sendTimer = null;
+    if (!active || document.hidden) return;
+    observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    scheduleSend(0);
+  }
+  const storage = globalThis.chrome?.storage;
+  if (storage?.local) {
+    active = false;
+    storage.local.get(["ebayLaptopHelperSettings"], stored => {
+      if (chrome.runtime.lastError) return;
+      const settings = stored.ebayLaptopHelperSettings || {};
+      active = settings.enabled !== false && settings.showItemPagePanel !== false;
+      syncObservation();
+    });
+    storage.onChanged.addListener((changes, area) => {
+      if (area !== "local" || !changes.ebayLaptopHelperSettings) return;
+      const settings = changes.ebayLaptopHelperSettings.newValue || {};
+      active = settings.enabled !== false && settings.showItemPagePanel !== false;
+      syncObservation();
+    });
+  } else syncObservation();
+  document.addEventListener?.("visibilitychange", syncObservation);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => scheduleSend(0), { once: true });

@@ -91,30 +91,6 @@ test("keeps a discrete GPU in the sold-listings search", () => {
   );
 });
 
-test("classifies explicit listing risks", () => {
-  const high = Core.assessListingRisk("Dell Latitude 5420 FOR PARTS - NO POWER");
-  assert.equal(high.level, "high");
-  assert.deepEqual(Array.from(high.flags, (flag) => flag.code), ["parts", "power"]);
-
-  const medium = Core.assessListingRisk("ThinkPad T14 untested, no charger");
-  assert.equal(medium.level, "medium");
-  assert.deepEqual(Array.from(medium.flags, (flag) => flag.code), ["untested", "charger"]);
-
-  const low = Core.assessListingRisk("HP EliteBook 840 G8 i5 16GB 512GB");
-  assert.equal(low.level, "low");
-  assert.equal(low.flags.length, 0);
-});
-
-test("does not confuse a missing power adapter or absent BIOS password with a dead laptop", () => {
-  const adapter = Core.assessListingRisk("ThinkPad T14 no power adapter");
-  assert.equal(adapter.level, "medium");
-  assert.deepEqual(Array.from(adapter.flags, (flag) => flag.code), ["charger"]);
-
-  const unlocked = Core.assessListingRisk("Dell Latitude 5420 no BIOS password");
-  assert.equal(unlocked.level, "low");
-  assert.equal(unlocked.flags.length, 0);
-});
-
 test("extracts useful facts from the seller description", () => {
   const description = `
 Condition: This unit has very little wear with only very few scratches on it. The unit is fully functional — keyboard, trackpad, touchscreen, hinge, and fingerprint reader all work properly, and the display shows no cracks or dead pixels. Battery is in decent shape — battery report shows 90%. Boots cleanly into a freshly installed Windows 11 Home.
@@ -146,9 +122,7 @@ No box, no manuals, no recovery media
   assert.equal(info.specs.find((spec) => spec.label === "Storage").value.includes("512 GB"), true);
   assert.equal(info.specs.find((spec) => spec.label === "Operating System").value.includes("Windows 11 Home"), true);
 
-  const risk = Core.assessListingRisk(description);
-  assert.equal(risk.level, "low");
-  assert.equal(risk.flags.some((flag) => flag.code === "display"), false);
+
 });
 
 test("sanitizes configurable title colors", () => {
@@ -173,8 +147,6 @@ test("keeps the helper enabled unless the user turns it off", () => {
   assert.equal(Core.sanitizeSettings({ enabled: false }).enabled, false);
   assert.equal(Core.sanitizeSettings({}).showSoldSearch, true);
   assert.equal(Core.sanitizeSettings({ showSoldSearch: false }).showSoldSearch, false);
-  assert.equal(Core.sanitizeSettings({}).showRiskBadges, true);
-  assert.equal(Core.sanitizeSettings({ showRiskBadges: false }).showRiskBadges, false);
   assert.equal(Core.sanitizeSettings({}).showItemPagePanel, true);
   assert.equal(Core.sanitizeSettings({ showItemPagePanel: false }).showItemPagePanel, false);
 });

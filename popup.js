@@ -5,6 +5,17 @@
   const SETTINGS_KEY = "ebayLaptopHelperSettings";
   const form = document.getElementById("settingsForm");
   const status = document.getElementById("status");
+  const controls = ["enabled", "settingsFields", "resetButton", "saveButton"].map(id => document.getElementById(id));
+  let loaded = false;
+  let writing = false;
+  function report(message, error = false) {
+    status.textContent = message;
+    status.dataset.error = String(error);
+  }
+  function setBusy(busy) {
+    writing = busy;
+    controls.forEach(element => { element.disabled = busy || !loaded; });
+  }
   const fields = [
     "enabled",
     "usdRate",
@@ -17,10 +28,8 @@
     "redTitleColor",
     "preferredKeywords",
     "excludedKeywords",
-    "markNewItems",
     "showConvertedPrice",
     "showSoldSearch",
-    "showRiskBadges",
     "showItemPagePanel"
   ];
 
@@ -44,6 +53,9 @@
   }
 
   function updatePreview() {
+    const green = document.getElementById("greenMaxUah");
+    const yellow = document.getElementById("yellowMaxUah");
+    yellow.setCustomValidity(Number(yellow.value) < Number(green.value) ? "Жовта межа має бути не меншою за зелену." : "");
     const values = readFormValues();
     document.getElementById("markupFactor").textContent = (1 + values.markupPercent / 100)
       .toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 3 });
@@ -52,36 +64,50 @@
     document.getElementById("examplePreview").textContent = `Наприклад, $300 + $20 доставка → ${Core.formatConvertedPrice({ minUsd: 300, maxUsd: 300, isRange: false }, values, 20)}`;
   }
 
-  form.addEventListener("input", updatePreview);
+  form.addEventListener("input", () => {
+    updatePreview();
+    report("Є незбережені зміни.");
+  });
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!loaded || writing) return;
     const values = readFormValues();
+    setBusy(true);
     chrome.storage.local.set({ [SETTINGS_KEY]: values }, () => {
+      setBusy(false);
       if (chrome.runtime.lastError) {
-        status.textContent = "Не вдалося зберегти: " + chrome.runtime.lastError.message;
+        report("Не вдалося зберегти: " + chrome.runtime.lastError.message, true);
         return;
       }
       setFormValues(values);
-      status.textContent = "Збережено — сторінка оновиться автоматично.";
-      setTimeout(() => { status.textContent = ""; }, 2600);
+      report("Збережено. Зміни вже застосовано до eBay.");
     });
   });
 
   document.getElementById("enabled").addEventListener("change", event => {
+    if (!loaded || writing) return;
     const enabled = event.target.checked;
+    setBusy(true);
     chrome.storage.local.get([SETTINGS_KEY], stored => {
-      if (chrome.runtime.lastError) { status.textContent = "Не вдалося прочитати налаштування."; return; }
+      if (chrome.runtime.lastError) {
+        event.target.checked = !enabled;
+        setBusy(false);
+        report("Не вдалося прочитати налаштування.", true);
+        return;
+      }
       const values = Core.sanitizeSettings({ ...stored[SETTINGS_KEY], enabled });
       chrome.storage.local.set({ [SETTINGS_KEY]: values }, () => {
-        status.textContent = chrome.runtime.lastError ? "Не вдалося змінити стан розширення." : enabled ? "Розширення увімкнено." : "Розширення вимкнено.";
+        setBusy(false);
+        if (chrome.runtime.lastError) event.target.checked = !enabled;
+        report(chrome.runtime.lastError ? "Не вдалося змінити стан розширення." : enabled ? "Розширення увімкнено." : "Розширення вимкнено.", Boolean(chrome.runtime.lastError));
       });
     });
   });
 
   document.getElementById("resetButton").addEventListener("click", () => {
-    setFormValues(Core.DEFAULTS);
-    status.textContent = "Типові значення відновлено. Натисніть «Зберегти».";
+    setFormValues({ ...Core.DEFAULTS, enabled: document.getElementById("enabled").checked });
+    report("Типові значення відновлено. Натисніть «Зберегти».");
   });
 
   document.getElementById("exportButton").addEventListener("click", () => {
@@ -103,12 +129,19 @@
       const imported = JSON.parse(await file.text());
       if (imported.version !== 1 || !imported.settings || typeof imported.settings !== "object" || Array.isArray(imported.settings)) throw new Error("Невідомий формат");
       setFormValues(imported.settings);
-      status.textContent = "Налаштування прочитано. Перевірте значення й натисніть «Зберегти».";
-    } catch { status.textContent = "Не вдалося імпортувати файл налаштувань."; }
+      report("Файл прочитано. Перевірте значення й натисніть «Зберегти».");
+    } catch { report("Не вдалося імпортувати файл налаштувань.", true); }
     importFile.value = "";
   });
 
   chrome.storage.local.get([SETTINGS_KEY], (stored) => {
+    if (chrome.runtime.lastError) {
+      report("Не вдалося прочитати налаштування. Закрийте меню й відкрийте знову.", true);
+      return;
+    }
     setFormValues(stored[SETTINGS_KEY] || Core.DEFAULTS);
+    loaded = true;
+    setBusy(false);
+    report("Налаштування завантажено.");
   });
 })();

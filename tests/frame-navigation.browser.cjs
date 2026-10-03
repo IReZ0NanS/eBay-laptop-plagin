@@ -48,18 +48,18 @@ async function check(browser, root, expectMismatch) {
     const frame = page.frames().find(candidate => candidate.url().startsWith('https://itm.ebaydesc.com/'));
     assert.ok(frame, 'description frame navigated');
     await frame.addScriptTag({ path: path.join(root, 'description.js') });
-    await page.waitForFunction(() => document.querySelector('.ebay-helper-item-risk')?.textContent.includes('Можливе блокування'));
-    const riskBefore = await page.locator('.ebay-helper-item-risk').innerText();
-    assert.match(riskBefore, /Здута батарея/);
+    await page.waitForFunction(() => document.querySelector('.ebay-helper-full-description')?.textContent.includes('MDM locked'));
+    const riskBefore = await page.locator('.ebay-helper-full-description').textContent();
+    assert.match(riskBefore, /Battery swollen/);
     // Correct ID from an untrusted origin must still be rejected.
     await page.evaluate(() => window.postMessage({ source: 'ebay-laptop-helper', type: 'EBAY_LAPTOP_HELPER_SELLER_DESCRIPTION', itemId: '123456789012', text: 'Everything is fully functional.' }, '*'));
     // Trusted description frame with a different item ID must still be rejected.
     await frame.evaluate(() => window.top.postMessage({ source: 'ebay-laptop-helper', type: 'EBAY_LAPTOP_HELPER_SELLER_DESCRIPTION', itemId: '123456789099', text: 'Everything is fully functional.' }, 'https://www.ebay.com'));
     await page.waitForTimeout(350);
-    assert.equal(await page.locator('.ebay-helper-item-risk').innerText(), riskBefore);
+    assert.equal(await page.locator('.ebay-helper-full-description').textContent(), riskBefore);
     assert.deepEqual(pageErrors, []);
     if (!expectMismatch) assert.deepEqual(consoleErrors, []);
-    console.log(expectMismatch ? 'PASS: reproduced 1.9.0 origin mismatch during delayed iframe navigation' : 'PASS: 1.9.1 has no console errors, reads loaded description, rejects untrusted origin and wrong item ID');
+    console.log(expectMismatch ? 'PASS: reproduced 1.9.0 origin mismatch during delayed iframe navigation' : 'PASS: no console errors, reads loaded description, rejects untrusted origin and wrong item ID');
   } finally { release(); await context.close(); }
 }
 (async () => {

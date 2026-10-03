@@ -13,14 +13,13 @@
     redTitleColor: "#c62828",
     preferredKeywords: "",
     excludedKeywords: "parts, repair, broken, as is, for parts",
-    markNewItems: true,
     showConvertedPrice: true,
     showSoldSearch: true,
-    showRiskBadges: true,
     showItemPagePanel: true
   });
 
   function boundedNumber(value, fallback, min, max) {
+    if (value === null || value === undefined || value === "" || typeof value === "boolean") return fallback;
     const number = Number(value);
     return Number.isFinite(number) && number >= min && number <= max
       ? number
@@ -51,15 +50,13 @@
       yellowTitleColor: sanitizeColor(source.yellowTitleColor, DEFAULTS.yellowTitleColor),
       redTitleColor: sanitizeColor(source.redTitleColor, DEFAULTS.redTitleColor),
       preferredKeywords: typeof source.preferredKeywords === "string"
-        ? source.preferredKeywords.trim()
+        ? source.preferredKeywords.trim().slice(0, 2000)
         : DEFAULTS.preferredKeywords,
       excludedKeywords: typeof source.excludedKeywords === "string"
-        ? source.excludedKeywords.trim()
+        ? source.excludedKeywords.trim().slice(0, 2000)
         : DEFAULTS.excludedKeywords,
-      markNewItems: source.markNewItems !== false,
       showConvertedPrice: source.showConvertedPrice !== false,
       showSoldSearch: source.showSoldSearch !== false,
-      showRiskBadges: source.showRiskBadges !== false,
       showItemPagePanel: source.showItemPagePanel !== false
     };
   }
@@ -116,6 +113,11 @@
 
     if (!amounts.length) return null;
 
+    const shortRange = sourceText.match(/(?:US\s*\$|U\.S\.\s*\$|USD\s*|\$)\s*([0-9][0-9\s.,]*)\s*(?:to|through|[-–—])\s*([0-9][0-9\s.,]*)/i);
+    if (shortRange && amounts.length === 1) {
+      const end = parseLocalizedNumber(shortRange[2]);
+      if (end !== null && end !== amounts[0]) amounts.push(end);
+    }
     const hasRangeLanguage = /\b(?:to|through)\b|[-–—]/i.test(sourceText);
     const range = hasRangeLanguage && amounts.length > 1 ? amounts.slice(0, 2) : [amounts[0]];
     return {
@@ -134,7 +136,7 @@
 
     if (!sourceText || !/\b(?:shipping|delivery|postage)\b/i.test(sourceText)) return null;
 
-    if (/\bfree\s+(?:shipping|delivery|postage)\b|\b(?:shipping|delivery|postage)\s*:?\s*free\b/i.test(sourceText)) {
+    if (/\bfree\s+(?:(?:international|standard|economy|expedited|domestic)\s+)?(?:shipping|delivery|postage)\b|\b(?:shipping|delivery|postage)\s*:?\s*free\b/i.test(sourceText)) {
       return { usd: 0, isFree: true, sourceText };
     }
 
@@ -256,57 +258,6 @@
   function buildEbaySoldSearchUrl(title) {
     const query = encodeURIComponent(buildEbaySoldSearchQuery(title));
     return `https://www.ebay.com/sch/i.html?_nkw=${query}&_sacat=177&LH_Sold=1&LH_Complete=1&_sop=13`;
-  }
-
-  function assessListingRisk(text) {
-    const source = String(text || "")
-      .replace(/[\u00a0\u202f]/g, " ")
-      // Seller descriptions often explicitly confirm the absence of defects.
-      // Remove those positive phrases before applying keyword-based warnings.
-      .replace(/\bno\s+cracks?\s+or\s+dead\s+pixels?\b/gi, " ")
-      .replace(/\b(?:no|without)\s+(?:visible\s+)?(?:cracks?|dead\s+pixels?|liquid\s+damage|water\s+damage)\b/gi, " ");
-    const rules = [
-      { code: "parts", severity: "high", label: "На запчастини", pattern: /\b(?:for\s+parts|parts\s+only|parts\s+or\s+repair|not\s+working)\b/i },
-      { code: "power", severity: "high", label: "Не вмикається", pattern: /\b(?:does\s+not\s+turn\s+on|no\s+power(?!\s+(?:adapter|supply|cord))|does\s+not\s+power\s+on|won['’]?t\s+(?:power|turn)\s+on|dead\s+unit)\b/i },
-      {
-        code: "locks",
-        severity: "high",
-        label: "Можливе блокування",
-        pattern: /\b(?:(?:bios|uefi|firmware|admin|icloud|activation|mdm)\s*(?:lock(?:ed)?|password)|(?:lock(?:ed)?|password)\s*(?:bios|uefi|firmware|admin|icloud|activation|mdm)|computrace|autopilot\s+lock(?:ed)?)\b/i,
-        excludePattern: /\b(?:no|without)\s+(?:bios|uefi|firmware|admin|icloud|activation|mdm)\s+(?:lock|password)\b/i
-      },
-      { code: "broken", severity: "high", label: "Зламаний / as is", pattern: /\b(?:broken|as[\s-]+is|liquid\s+damage(?:d)?|water\s+damage(?:d)?)\b/i },
-      { code: "untested", severity: "medium", label: "Не протестований", pattern: /\b(?:untested|not\s+tested|unable\s+to\s+test|unknown\s+condition)\b/i },
-      { code: "description", severity: "medium", label: "Перевір опис", pattern: /\b(?:read\s+(?:the\s+)?description|see\s+description)\b/i },
-      { code: "storage", severity: "medium", label: "Без накопичувача", pattern: /\b(?:no|missing|without)\s+(?:ssd|hdd|hard\s+drive|storage)\b/i },
-      { code: "memory", severity: "medium", label: "Без RAM", pattern: /\b(?:no|missing|without)\s+(?:ram|memory)\b/i },
-      { code: "swollen", severity: "high", label: "Здута батарея", pattern: /\b(?:(?:swollen|swelling|bloated)\s+battery|battery\s+(?:is\s+)?(?:swollen|swelling|bloated))\b/i },
-      { code: "battery", severity: "medium", label: "Проблема з батареєю", pattern: /\b(?:(?:no|missing|without|bad|dead)\s+battery|battery\s+(?:swollen|swelling|bloated|dead|bad|issue|fault|not\s+included|does\s+not\s+hold\s+(?:a\s+)?charge))\b/i },
-      { code: "display", severity: "medium", label: "Дефект екрана", pattern: /\b(?:screen\s+(?:issue|damage|crack(?:ed)?|lines?)|cracked\s+screen|dead\s+pixels?|white\s+spots?|lcd\s+(?:issue|damage|lines?))\b/i },
-      { code: "hinge", severity: "medium", label: "Проблема з петлями", pattern: /\b(?:broken|damaged|loose)\s+hinge(?:s)?\b|\bhinge(?:s)?\s+(?:broken|damaged|loose)\b/i },
-      { code: "keyboard", severity: "medium", label: "Проблема з клавіатурою", pattern: /\b(?:missing\s+keys?|keyboard\s+(?:issue|fault|not\s+working)|keys?\s+not\s+working)\b/i },
-      { code: "charger", severity: "medium", label: "Без зарядного", pattern: /\b(?:no|missing|without)\s+(?:charger|ac\s+adapter|power\s+adapter)\b/i },
-      { code: "returns", severity: "medium", label: "Без повернення", pattern: /\b(?:no\s+returns?|final\s+sale)\b/i },
-      { code: "lot", severity: "medium", label: "Лот із кількох пристроїв", pattern: /\b(?:lot\s+of\s+\d+|\d+\s*[x×]\s+(?:laptops?|notebooks?|computers?|pcs?))\b/i }
-    ];
-
-    const clauses = source.split(/(?:[.!?;\n]+|\bbut\b|\bhowever\b)/i).map(s => s.trim()).filter(Boolean);
-    const flags = rules.flatMap(rule => {
-      const evidence = clauses.find(clause => {
-        const checked = clause
-          .replace(/\b(?:no|without)\s+(?:bios|uefi|firmware|admin|icloud|activation|mdm)\s+(?:lock(?:ed)?|password)\b/gi, " ")
-          .replace(/\b(?:no|without)\s+broken\s+parts\b/gi, " ")
-          .replace(/\b(?:not|never)\s+(?:broken|damaged|cracked)\b/gi, " ");
-        return rule.pattern.test(checked);
-      });
-      if (rule.code === "battery" && /\b(?:swollen|swelling|bloated)\b/i.test(evidence || "")) return [];
-      return evidence ? [{ code: rule.code, severity: rule.severity, label: rule.label, evidence }] : [];
-    });
-    const level = flags.some((flag) => flag.severity === "high")
-      ? "high"
-      : flags.length ? "medium" : "low";
-
-    return { level, flags };
   }
 
   function extractSellerDescriptionInfo(text) {
@@ -479,7 +430,6 @@
     buildOlxSearchUrl,
     buildEbaySoldSearchQuery,
     buildEbaySoldSearchUrl,
-    assessListingRisk,
     extractSellerDescriptionInfo,
     keywordList,
     matchesKeywords,

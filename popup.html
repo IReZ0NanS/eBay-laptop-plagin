@@ -12,12 +12,12 @@
         <div class="logo">₴</div>
         <div>
           <h1>eBay Laptop Helper</h1>
-          <p>Каталог і сторінка конкретного товару</p>
+          <p>Ціна, опис продавця та пошук аналогів</p>
         </div>
       </header>
 
       <label class="toggle master-toggle">
-        <input id="enabled" name="enabled" type="checkbox">
+        <input id="enabled" name="enabled" type="checkbox" disabled>
         <span>Увімкнути розширення на eBay</span>
       </label>
 
@@ -28,6 +28,8 @@
       </section>
 
       <form id="settingsForm">
+        <fieldset id="settingsFields" disabled>
+        <legend class="sr-only">Налаштування розширення</legend>
         <div class="grid">
           <label>
             Курс USD, ₴
@@ -37,22 +39,31 @@
             Націнка, %
             <input id="markupPercent" name="markupPercent" type="number" min="0" max="500" step="0.1" required>
           </label>
-          <label class="wide">
-            Додаткові витрати, $
+          <label title="Фіксовані додаткові витрати в доларах">
+            Витрати, $
             <input id="fixedFeeUsd" name="fixedFeeUsd" type="number" min="0" max="100000" step="0.01" required>
           </label>
         </div>
 
+        <fieldset class="features">
+          <legend>Показувати на eBay</legend>
+          <label class="toggle"><input id="showConvertedPrice" name="showConvertedPrice" type="checkbox"><span>Розрахунок у гривнях</span></label>
+          <label class="toggle"><input id="showSoldSearch" name="showSoldSearch" type="checkbox"><span>Пошук проданих аналогів SOLD</span></label>
+          <label class="toggle"><input id="showItemPagePanel" name="showItemPagePanel" type="checkbox"><span>Помічник на сторінці ноутбука</span></label>
+        </fieldset>
+        <details class="advanced">
+          <summary>Кольори та слова у назві</summary>
+          <div class="advanced-content">
         <fieldset>
-          <legend>Кольори за повною ціною</legend>
+          <legend>Межі повної ціни</legend>
           <label class="threshold green">
             <span>Зелений — до</span>
-            <input id="greenMaxUah" name="greenMaxUah" type="number" min="0" max="10000000" step="100" required>
+            <input id="greenMaxUah" name="greenMaxUah" type="number" min="0" max="10000000" step="1" required>
             <span>₴</span>
           </label>
           <label class="threshold yellow">
             <span>Жовтий — до</span>
-            <input id="yellowMaxUah" name="yellowMaxUah" type="number" min="0" max="10000000" step="100" required>
+            <input id="yellowMaxUah" name="yellowMaxUah" type="number" min="0" max="10000000" step="1" required>
             <span>₴</span>
           </label>
           <p class="hint"><i class="red-dot"></i> Дорожчі товари будуть червоними.</p>
@@ -74,52 +85,39 @@
               <input id="redTitleColor" name="redTitleColor" type="color">
             </label>
           </div>
-          <p class="hint">Колір ціни залишається стандартним; змінюється лише назва.</p>
+          <p class="hint">Назви й ціни позначаються за ціновою зоною. Власні кольори змінюють лише назви.</p>
         </fieldset>
 
         <label>
           Бажані слова в назві
-          <textarea id="preferredKeywords" name="preferredKeywords" rows="2" placeholder="ThinkPad, Ryzen 7, RTX"></textarea>
+          <textarea id="preferredKeywords" name="preferredKeywords" maxlength="2000" rows="2" placeholder="ThinkPad, Ryzen 7, RTX"></textarea>
           <small>Збіги будуть позначені синім підкресленням. Розділяйте слова комами.</small>
         </label>
 
         <label>
           Небажані слова в назві
-          <textarea id="excludedKeywords" name="excludedKeywords" rows="2" placeholder="parts, repair, broken"></textarea>
+          <textarea id="excludedKeywords" name="excludedKeywords" maxlength="2000" rows="2" placeholder="parts, repair, broken"></textarea>
           <small>Такі картки стануть напівпрозорими.</small>
         </label>
 
-        <label class="toggle">
-          <input id="markNewItems" name="markNewItems" type="checkbox">
-          <span>Позначати нові товари протягом 24 годин</span>
-        </label>
-        <label class="toggle">
-          <input id="showConvertedPrice" name="showConvertedPrice" type="checkbox">
-          <span>Показувати розрахунок у гривнях</span>
-        </label>
-        <label class="toggle">
-          <input id="showSoldSearch" name="showSoldSearch" type="checkbox">
-          <span>Показувати пошук завершених продажів SOLD</span>
-        </label>
-        <label class="toggle">
-          <input id="showRiskBadges" name="showRiskBadges" type="checkbox">
-          <span>Попереджати про ризикові слова в назві</span>
-        </label>
-        <label class="toggle">
-          <input id="showItemPagePanel" name="showItemPagePanel" type="checkbox">
-          <span>Показувати помічник на сторінці товару</span>
-        </label>
-
+          </div>
+        </details>
+        <details class="advanced">
+          <summary>Перенесення налаштувань</summary>
+          <div class="advanced-content actions">
+            <button type="button" id="exportButton" class="secondary">Експорт у файл</button>
+            <button type="button" id="importButton" class="secondary">Імпорт із файлу</button>
+            <input id="importFile" type="file" accept="application/json,.json" hidden>
+          </div>
+        </details>
+        </fieldset>
+        <footer class="save-bar">
         <div class="actions">
-          <button type="button" id="resetButton" class="secondary">Типові значення</button>
-          <button type="submit" class="primary">Зберегти</button>
+          <button type="button" id="resetButton" class="secondary" disabled>Типові значення</button>
+          <button type="submit" id="saveButton" class="primary" disabled>Зберегти</button>
         </div>
-        <p id="status" role="status" aria-live="polite"></p>
-        <div class="actions">
-          <button type="button" id="exportButton" class="secondary">Експорт налаштувань</button>
-          <button type="button" id="importButton" class="secondary">Імпорт</button>
-          <input id="importFile" type="file" accept="application/json,.json" hidden>
-        </div>
+        <p id="status" role="status" aria-live="polite">Завантаження налаштувань…</p>
+        </footer>
       </form>
     </main>
     <script src="core.js"></script>
