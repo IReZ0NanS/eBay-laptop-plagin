@@ -127,9 +127,49 @@
     };
   }
 
+  // Splits text into chunks of whole lines so long descriptions are translated
+  // piece by piece and line breaks survive.
+  function textChunks(text, maxLength = 1500) {
+    const chunks = [];
+    let current = "";
+    for (const line of String(text || "").split("\n")) {
+      for (let start = 0; start < Math.max(line.length, 1); start += maxLength) {
+        const piece = line.slice(start, start + maxLength);
+        if (current && current.length + piece.length + 1 > maxLength) {
+          chunks.push(current);
+          current = piece;
+        } else {
+          current = current ? `${current}\n${piece}` : piece;
+        }
+      }
+    }
+    if (current) chunks.push(current);
+    return chunks;
+  }
+
+  async function translateText(text, activeTranslator, onProgress) {
+    if (!activeTranslator || typeof activeTranslator.translate !== "function") {
+      throw translationError("invalid-translator", "A translator with a translate method is required");
+    }
+
+    const chunks = textChunks(text);
+    const translated = [];
+    reportProgress(onProgress, { completed: 0, total: chunks.length });
+    for (let index = 0; index < chunks.length; index += 1) {
+      const chunk = chunks[index];
+      const value = chunk.trim()
+        ? String(await activeTranslator.translate(chunk) || "").trim() || chunk
+        : chunk;
+      translated.push(value);
+      reportProgress(onProgress, { completed: index + 1, total: chunks.length });
+    }
+    return translated.join("\n");
+  }
+
   global.EbayLaptopTranslation = Object.freeze({
     LANGUAGE_PAIR,
     getEnglishToUkrainianTranslator,
-    translateSellerDescriptionInfo
+    translateSellerDescriptionInfo,
+    translateText
   });
 })(globalThis);

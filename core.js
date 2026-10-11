@@ -1,6 +1,14 @@
 (function initEbayLaptopCore(global) {
   "use strict";
 
+  const SETTINGS_KEY = "ebayLaptopHelperSettings";
+  // eBay may show Canadian/Australian dollars and other currencies. The user
+  // formula is USD-only, so those amounts are never treated as USD.
+  const NON_USD_PATTERN = /(?:\bC\s*\$|\bCA\s*\$|\bAU\s*\$|\bA\s*\$|\bNZ\s*\$|CAD|AUD|GBP|EUR|£|€)/i;
+  // With a foreign currency present, only eBay's own conversion counts:
+  // "EUR 259.00 Approximately US $290.08".
+  const APPROX_USD_PATTERN = /approx(?:imately|\.)?\s*(?:US\s*\$|USD)\s*([0-9][0-9\s.,]*)/i;
+
   const DEFAULTS = Object.freeze({
     enabled: true,
     usdRate: 46,
@@ -15,7 +23,9 @@
     excludedKeywords: "parts, repair, broken, as is, for parts",
     showConvertedPrice: true,
     showSoldSearch: true,
-    showItemPagePanel: true
+    showItemPagePanel: true,
+    hideRed: false,
+    hideExcluded: false
   });
 
   function boundedNumber(value, fallback, min, max) {
@@ -57,8 +67,16 @@
         : DEFAULTS.excludedKeywords,
       showConvertedPrice: source.showConvertedPrice !== false,
       showSoldSearch: source.showSoldSearch !== false,
-      showItemPagePanel: source.showItemPagePanel !== false
+      showItemPagePanel: source.showItemPagePanel !== false,
+      hideRed: source.hideRed === true,
+      hideExcluded: source.hideExcluded === true
     };
+  }
+
+  // A single separator followed by one or two digits is a decimal point;
+  // three digits (or repeated separators) are thousands.
+  function isDecimalPart(value, separator, decimalDigits) {
+    return (decimalDigits === 1 || decimalDigits === 2) && value.indexOf(separator) === value.lastIndexOf(separator);
   }
 
   function parseLocalizedNumber(rawValue) {
@@ -76,12 +94,12 @@
       }
     } else if (commaIndex !== -1) {
       const decimalDigits = value.length - commaIndex - 1;
-      value = decimalDigits === 2
+      value = isDecimalPart(value, ",", decimalDigits)
         ? value.replace(",", ".")
         : value.replace(/,/g, "");
     } else if (dotIndex !== -1) {
       const decimalDigits = value.length - dotIndex - 1;
-      if (decimalDigits !== 2) value = value.replace(/\./g, "");
+      if (!isDecimalPart(value, ".", decimalDigits)) value = value.replace(/\./g, "");
     }
 
     const number = Number(value);
@@ -96,10 +114,10 @@
 
     if (!sourceText) return null;
 
-    // eBay may show Canadian/Australian dollars and other currencies. The user
-    // formula is USD-only, so those prices are intentionally not converted.
-    if (/(?:\bC\s*\$|\bCA\s*\$|\bAU\s*\$|\bA\s*\$|\bNZ\s*\$|CAD|AUD|GBP|EUR|£|€)/i.test(sourceText)) {
-      return null;
+    if (NON_USD_PATTERN.test(sourceText)) {
+      const approx = sourceText.match(APPROX_USD_PATTERN);
+      const number = approx ? parseLocalizedNumber(approx[1]) : null;
+      return number === null ? null : { minUsd: number, maxUsd: number, isRange: false, sourceText };
     }
 
     const amounts = [];
@@ -141,8 +159,10 @@
     }
 
     // Ignore non-US dollar amounts instead of treating every "$" as USD.
-    if (/(?:\bC\s*\$|\bCA\s*\$|\bAU\s*\$|\bA\s*\$|\bNZ\s*\$|CAD|AUD|GBP|EUR|£|€)/i.test(sourceText)) {
-      return null;
+    if (NON_USD_PATTERN.test(sourceText)) {
+      const approx = sourceText.match(APPROX_USD_PATTERN);
+      const number = approx ? parseLocalizedNumber(approx[1]) : null;
+      return number === null ? null : { usd: number, isFree: false, sourceText };
     }
 
     const amountPattern = "([0-9][0-9\\s.,]*)";
@@ -188,9 +208,57 @@
     return price.isRange ? `≈ ${formatUah(min)} – ${formatUah(max)}` : `≈ ${formatUah(max)}`;
   }
 
+  // Whole dollars stay short ("$30"); cents always have two digits ("$16.50").
+  function formatUsd(value) {
+    const digits = Number.isInteger(value) ? 0 : 2;
+    return new Intl.NumberFormat("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
+  }
+
+  function formatUsdPrice(price) {
+    const min = `$${formatUsd(price.minUsd)}`;
+    const max = `$${formatUsd(price.maxUsd)}`;
+    return price.isRange ? `${min} – ${max}` : max;
+  }
+
+  function shippingLabel(shipping, unknownLabel = "доставку не знайдено — у формулі використано $0") {
+    if (!shipping?.known) return unknownLabel;
+    return shipping.isFree ? "безкоштовна доставка" : `доставка $${formatUsd(shipping.usd)}`;
+  }
+
+  function formulaTitle(settings) {
+    const safe = sanitizeSettings(settings);
+    return `Формула: ((ціна + доставка) × ${1 + safe.markupPercent / 100} + $${safe.fixedFeeUsd}) × ${safe.usdRate}`;
+  }
+
+  // Price tier and keyword signals shared by catalog cards and the item panel.
+  function evaluateListing(title, price, shipping, settings) {
+    const totalUah = calculateTotalUah(price.maxUsd, settings, shipping?.usd || 0);
+    return {
+      tier: classifyTotalUah(totalUah, settings),
+      preferred: matchesKeywords(title, settings.preferredKeywords),
+      excluded: matchesKeywords(title, settings.excludedKeywords)
+    };
+  }
+
+  function cleanTitle(title) {
+    return String(title || "")
+      .replace(/\s*Opens in a new window or tab\s*/gi, " ")
+      .replace(/^\s*New Listing\s*/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function stableHash(value) {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
   function buildOlxSearchQuery(title, includeProcessor = true) {
-    let query = String(title || "")
-      .replace(/^\s*new listing\s*/i, "")
+    let query = cleanTitle(title)
       .replace(/[([{]\s*#?\d+\s*[)\]}]/g, " ")
       .replace(/#\d+\b/g, " ")
       .replace(/^\s*(?:lot\s+(?:of\s+)?)?\d{1,3}\s*[x×]?\s+(?=(?:acer|apple|asus|dell|fujitsu|gigabyte|hp|lenovo|microsoft|msi|panasonic|razer|samsung|sony|toshiba)\b)/i, "")
@@ -225,9 +293,13 @@
     return (query || "ноутбук").slice(0, 140).trim();
   }
 
-  function buildOlxSearchUrl(title) {
-    const pathQuery = encodeURIComponent(buildOlxSearchQuery(title)).replace(/%20/g, "-");
+  function buildOlxSearchUrlFromQuery(query) {
+    const pathQuery = encodeURIComponent(String(query || "").trim()).replace(/%20/g, "-");
     return `https://www.olx.ua/uk/elektronika/noutbuki-i-aksesuary/noutbuki/q-${pathQuery}/`;
+  }
+
+  function buildOlxSearchUrl(title) {
+    return buildOlxSearchUrlFromQuery(buildOlxSearchQuery(title));
   }
 
   function buildEbaySoldSearchQuery(title) {
@@ -255,9 +327,13 @@
       .slice(0, 180);
   }
 
+  function buildEbaySoldSearchUrlFromQuery(query) {
+    const encoded = encodeURIComponent(String(query || "").trim());
+    return `https://www.ebay.com/sch/i.html?_nkw=${encoded}&_sacat=177&LH_Sold=1&LH_Complete=1&_sop=13`;
+  }
+
   function buildEbaySoldSearchUrl(title) {
-    const query = encodeURIComponent(buildEbaySoldSearchQuery(title));
-    return `https://www.ebay.com/sch/i.html?_nkw=${query}&_sacat=177&LH_Sold=1&LH_Complete=1&_sop=13`;
+    return buildEbaySoldSearchUrlFromQuery(buildEbaySoldSearchQuery(title));
   }
 
   function extractSellerDescriptionInfo(text) {
@@ -334,13 +410,13 @@
     function addSpec(line) {
       const match = line.match(/^([^:]{2,45}):\s*(.+)$/);
       if (!match) return false;
-      const label = match[1].trim();
-      const value = match[2].trim();
-      const signature = `${label}: ${value}`.toLocaleLowerCase();
-      if (!result.specs.some((spec) => `${spec.label}: ${spec.value}`.toLocaleLowerCase() === signature)) {
-        addSpecValue(label, value);
-      }
+      addSpecValue(match[1], match[2]);
       return true;
+    }
+
+    // Hardware lines are shown as specs; repeating them as highlights only adds noise.
+    function isHardwareSpec(line) {
+      return /^(?:processor|cpu|graphics|gpu|memory|ram|storage|display|screen|bios|operating system|os)\s*:/i.test(line);
     }
 
     let pendingSpecLabel = "";
@@ -358,7 +434,7 @@
           return;
         }
         pendingSpecLabel = "";
-        addSpec(line);
+        if (!addSpec(line) || !isHardwareSpec(line)) classifyImportantText(line);
         return;
       }
       if (section === "included") addUnique(result.included, line, 10);
@@ -368,7 +444,6 @@
 
     let section = null;
     for (const line of lines) {
-      classifyImportantText(line);
       const heading = sectionHeading(line);
       if (heading) {
         section = heading.section;
@@ -384,9 +459,10 @@
       }
 
       if (/^(?:shipping|returns?|payment|warranty|terms|contact)(?:\s+(?:policy|information))?\s*:/i.test(line)) section = null;
-      if (!section && /^(?:processor|cpu|graphics|gpu|memory|ram|storage|display|screen|bios|operating system)\s*:/i.test(line)) addSpec(line);
       if (section) {
         consumeSectionLine(section, line);
+      } else if (isHardwareSpec(line)) {
+        addSpec(line);
       } else {
         classifyImportantText(line);
       }
@@ -402,9 +478,26 @@
       .filter(Boolean);
   }
 
+  let keywordCache = { source: null, pattern: null };
+
+  // A keyword must start at a word boundary ("as is" must not match "has issues"),
+  // but may continue into a longer word ("RTX 30" matches "RTX 3060").
+  function keywordPattern(keywords) {
+    const source = String(keywords || "");
+    if (keywordCache.source !== source) {
+      const alternatives = keywordList(source)
+        .map((keyword) => keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"));
+      keywordCache = {
+        source,
+        pattern: alternatives.length ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives.join("|")})`, "iu") : null
+      };
+    }
+    return keywordCache.pattern;
+  }
+
   function matchesKeywords(title, keywords) {
-    const normalizedTitle = String(title || "").toLocaleLowerCase();
-    return keywordList(keywords).some((keyword) => normalizedTitle.includes(keyword));
+    const pattern = keywordPattern(keywords);
+    return Boolean(pattern && pattern.test(String(title || "")));
   }
 
   function extractItemId(url) {
@@ -417,6 +510,7 @@
   }
 
   global.EbayLaptopCore = Object.freeze({
+    SETTINGS_KEY,
     DEFAULTS,
     sanitizeSettings,
     parseLocalizedNumber,
@@ -426,10 +520,19 @@
     classifyTotalUah,
     formatUah,
     formatConvertedPrice,
+    formatUsd,
+    formatUsdPrice,
+    shippingLabel,
+    formulaTitle,
+    evaluateListing,
+    cleanTitle,
+    stableHash,
     buildOlxSearchQuery,
     buildOlxSearchUrl,
+    buildOlxSearchUrlFromQuery,
     buildEbaySoldSearchQuery,
     buildEbaySoldSearchUrl,
+    buildEbaySoldSearchUrlFromQuery,
     extractSellerDescriptionInfo,
     keywordList,
     matchesKeywords,

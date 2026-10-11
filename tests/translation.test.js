@@ -101,3 +101,17 @@ test("reports a clear error when Chrome has no built-in translator", async () =>
     (error) => error.code === "api-unavailable"
   );
 });
+
+test("translates the full description in line-preserving chunks", async () => {
+  const Translation = loadTranslation(undefined);
+  const calls = [];
+  const progress = [];
+  const text = `Line one\n\nLine two\n${"x".repeat(3200)}`;
+  const translated = await Translation.translateText(text, { translate: async (chunk) => { calls.push(chunk); return `uk:${chunk.length}`; } }, (value) => progress.push(value));
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every((chunk) => chunk.length <= 1500));
+  assert.equal(calls[0], "Line one\n\nLine two");
+  assert.equal(translated, "uk:18\nuk:1500\nuk:1500\nuk:200");
+  assert.equal(progress.at(-1).completed, 4);
+  await assert.rejects(Translation.translateText("a", null), /translate method/);
+});

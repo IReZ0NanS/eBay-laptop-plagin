@@ -2,20 +2,20 @@
   "use strict";
 
   const Core = globalThis.EbayLaptopCore;
-  const SETTINGS_KEY = "ebayLaptopHelperSettings";
+  const SETTINGS_KEY = Core.SETTINGS_KEY;
+  const SAVE_DELAY = 400;
+  const RESET_CONFIRM_TIMEOUT = 3000;
   const form = document.getElementById("settingsForm");
   const status = document.getElementById("status");
-  const controls = ["enabled", "settingsFields", "resetButton", "saveButton"].map(id => document.getElementById(id));
+  const enabledToggle = document.getElementById("enabled");
+  const resetButton = document.getElementById("resetButton");
+  const controls = [enabledToggle, document.getElementById("settingsFields"), resetButton];
   let loaded = false;
   let writing = false;
-  function report(message, error = false) {
-    status.textContent = message;
-    status.dataset.error = String(error);
-  }
-  function setBusy(busy) {
-    writing = busy;
-    controls.forEach(element => { element.disabled = busy || !loaded; });
-  }
+  let pendingWrite = false;
+  let saveTimer = null;
+  let resetTimer = null;
+
   const fields = [
     "enabled",
     "usdRate",
@@ -30,8 +30,15 @@
     "excludedKeywords",
     "showConvertedPrice",
     "showSoldSearch",
-    "showItemPagePanel"
+    "showItemPagePanel",
+    "hideRed",
+    "hideExcluded"
   ];
+
+  function report(message, error = false) {
+    status.textContent = message;
+    status.dataset.error = String(error);
+  }
 
   function setFormValues(values) {
     const safe = Core.sanitizeSettings(values);
@@ -64,50 +71,92 @@
     document.getElementById("examplePreview").textContent = `Наприклад, $300 + $20 доставка → ${Core.formatConvertedPrice({ minUsd: 300, maxUsd: 300, isRange: false }, values, 20)}`;
   }
 
+  function invalidFieldMessage() {
+    const invalid = form.querySelector(":invalid:not(fieldset)");
+    return invalid ? invalid.validationMessage || "Перевірте значення." : "";
+  }
+
+  // Writes are serialized; a change made while a write is in flight is saved right after it.
+  function save(successMessage = "Збережено. Зміни вже застосовано до eBay.") {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    if (!loaded) return;
+    const invalid = invalidFieldMessage();
+    if (invalid) {
+      report(`Не збережено: ${invalid}`, true);
+      return;
+    }
+    if (writing) {
+      pendingWrite = true;
+      return;
+    }
+
+    writing = true;
+    chrome.storage.local.set({ [SETTINGS_KEY]: readFormValues() }, () => {
+      writing = false;
+      if (chrome.runtime.lastError) {
+        pendingWrite = false;
+        report("Не вдалося зберегти: " + chrome.runtime.lastError.message, true);
+        return;
+      }
+      if (pendingWrite) {
+        pendingWrite = false;
+        save(successMessage);
+        return;
+      }
+      report(successMessage);
+    });
+  }
+
+  function scheduleSave() {
+    if (!loaded) return;
+    clearTimeout(saveTimer);
+    const invalid = invalidFieldMessage();
+    if (invalid) {
+      saveTimer = null;
+      report(`Не збережено: ${invalid}`, true);
+      return;
+    }
+    report("Зберігаю…");
+    saveTimer = setTimeout(() => save(), SAVE_DELAY);
+  }
+
   form.addEventListener("input", () => {
     updatePreview();
-    report("Є незбережені зміни.");
+    scheduleSave();
   });
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!loaded || writing) return;
-    const values = readFormValues();
-    setBusy(true);
-    chrome.storage.local.set({ [SETTINGS_KEY]: values }, () => {
-      setBusy(false);
-      if (chrome.runtime.lastError) {
-        report("Не вдалося зберегти: " + chrome.runtime.lastError.message, true);
-        return;
-      }
-      setFormValues(values);
-      report("Збережено. Зміни вже застосовано до eBay.");
-    });
+    save();
   });
 
-  document.getElementById("enabled").addEventListener("change", event => {
-    if (!loaded || writing) return;
-    const enabled = event.target.checked;
-    setBusy(true);
-    chrome.storage.local.get([SETTINGS_KEY], stored => {
-      if (chrome.runtime.lastError) {
-        event.target.checked = !enabled;
-        setBusy(false);
-        report("Не вдалося прочитати налаштування.", true);
-        return;
-      }
-      const values = Core.sanitizeSettings({ ...stored[SETTINGS_KEY], enabled });
-      chrome.storage.local.set({ [SETTINGS_KEY]: values }, () => {
-        setBusy(false);
-        if (chrome.runtime.lastError) event.target.checked = !enabled;
-        report(chrome.runtime.lastError ? "Не вдалося змінити стан розширення." : enabled ? "Розширення увімкнено." : "Розширення вимкнено.", Boolean(chrome.runtime.lastError));
-      });
-    });
+  enabledToggle.addEventListener("change", () => {
+    save(enabledToggle.checked ? "Розширення увімкнено." : "Розширення вимкнено.");
   });
 
-  document.getElementById("resetButton").addEventListener("click", () => {
-    setFormValues({ ...Core.DEFAULTS, enabled: document.getElementById("enabled").checked });
-    report("Типові значення відновлено. Натисніть «Зберегти».");
+  // The popup closes as soon as it loses focus; do not lose a change that is still waiting.
+  window.addEventListener("pagehide", () => {
+    if (saveTimer !== null) save();
+  });
+
+  function cancelResetConfirmation() {
+    clearTimeout(resetTimer);
+    resetTimer = null;
+    resetButton.textContent = "Типові значення";
+    delete resetButton.dataset.confirm;
+  }
+
+  resetButton.addEventListener("click", () => {
+    if (!resetButton.dataset.confirm) {
+      resetButton.dataset.confirm = "true";
+      resetButton.textContent = "Натисніть ще раз для скидання";
+      resetTimer = setTimeout(cancelResetConfirmation, RESET_CONFIRM_TIMEOUT);
+      return;
+    }
+    cancelResetConfirmation();
+    setFormValues({ ...Core.DEFAULTS, enabled: enabledToggle.checked });
+    save("Типові значення відновлено й збережено.");
   });
 
   document.getElementById("exportButton").addEventListener("click", () => {
@@ -119,6 +168,7 @@
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
+
   const importFile = document.getElementById("importFile");
   document.getElementById("importButton").addEventListener("click", () => importFile.click());
   importFile.addEventListener("change", async () => {
@@ -129,8 +179,10 @@
       const imported = JSON.parse(await file.text());
       if (imported.version !== 1 || !imported.settings || typeof imported.settings !== "object" || Array.isArray(imported.settings)) throw new Error("Невідомий формат");
       setFormValues(imported.settings);
-      report("Файл прочитано. Перевірте значення й натисніть «Зберегти».");
-    } catch { report("Не вдалося імпортувати файл налаштувань.", true); }
+      save("Налаштування імпортовано й збережено.");
+    } catch {
+      report("Не вдалося імпортувати файл налаштувань.", true);
+    }
     importFile.value = "";
   });
 
@@ -141,7 +193,7 @@
     }
     setFormValues(stored[SETTINGS_KEY] || Core.DEFAULTS);
     loaded = true;
-    setBusy(false);
-    report("Налаштування завантажено.");
+    controls.forEach(element => { element.disabled = false; });
+    report("Зміни зберігаються автоматично.");
   });
 })();

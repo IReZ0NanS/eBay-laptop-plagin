@@ -220,8 +220,6 @@ button {
   cursor: pointer;
 }
 
-.primary { flex: 1; background: #1565c0; color: #fff; }
-.primary:hover { background: #0d4f9c; }
 .secondary { border: 1px solid #c9d2df; background: #fff; color: #3f4a5c; }
 .secondary:hover { background: #f0f3f7; }
 

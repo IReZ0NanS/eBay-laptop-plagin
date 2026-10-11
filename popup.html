@@ -51,6 +51,12 @@
           <label class="toggle"><input id="showSoldSearch" name="showSoldSearch" type="checkbox"><span>Пошук проданих аналогів SOLD</span></label>
           <label class="toggle"><input id="showItemPagePanel" name="showItemPagePanel" type="checkbox"><span>Помічник на сторінці ноутбука</span></label>
         </fieldset>
+        <fieldset class="features">
+          <legend>Ховати у списку товарів</legend>
+          <label class="toggle"><input id="hideRed" name="hideRed" type="checkbox"><span>Дорожчі за жовту межу (червоні)</span></label>
+          <label class="toggle"><input id="hideExcluded" name="hideExcluded" type="checkbox"><span>З небажаними словами в назві</span></label>
+          <p class="hint">Кількість прихованих показується в кутку сторінки; натисніть, щоб тимчасово їх показати.</p>
+        </fieldset>
         <details class="advanced">
           <summary>Кольори та слова у назві</summary>
           <div class="advanced-content">
@@ -97,7 +103,7 @@
         <label>
           Небажані слова в назві
           <textarea id="excludedKeywords" name="excludedKeywords" maxlength="2000" rows="2" placeholder="parts, repair, broken"></textarea>
-          <small>Такі картки стануть напівпрозорими.</small>
+          <small>Такі картки стануть напівпрозорими або сховаються, якщо це ввімкнено вище.</small>
         </label>
 
           </div>
@@ -114,7 +120,6 @@
         <footer class="save-bar">
         <div class="actions">
           <button type="button" id="resetButton" class="secondary" disabled>Типові значення</button>
-          <button type="submit" id="saveButton" class="primary" disabled>Зберегти</button>
         </div>
         <p id="status" role="status" aria-live="polite">Завантаження налаштувань…</p>
         </footer>

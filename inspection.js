@@ -18,7 +18,11 @@
     if (disk) out.storage = `${Number(disk[1] || disk[3]) * ((disk[2] || disk[4]).toUpperCase() === "TB" ? 1024 : 1)} GB`;
     const capacityText = source.replace(/\b(?:rtx|gtx)\s*\d{3,4}(?:\s*ti)?\s+\d+\s*GB\b/gi, " ");
     const pair = capacityText.match(/\b(\d+)\s*GB\s+(?:[|/,]\s*)?(\d+(?:\.\d+)?)\s*(GB|TB)\b/i);
-    if (!out.ram && pair && Number(pair[1]) <= 128 && Number(pair[2]) * (pair[3].toUpperCase() === "TB" ? 1024 : 1) >= 128) out.ram = `${Number(pair[1])} GB`;
+    const pairStorage = pair ? Number(pair[2]) * (pair[3].toUpperCase() === "TB" ? 1024 : 1) : 0;
+    if (pair && Number(pair[1]) <= 128 && pairStorage >= 128) {
+      if (!out.ram) out.ram = `${Number(pair[1])} GB`;
+      if (!out.storage) out.storage = `${pairStorage} GB`;
+    }
     if (/\b(?:no|without|missing)\s+(?:RAM|memory)\b|\b(?:RAM|memory)\s+(?:removed|not included)\b/i.test(source)) out.ram = "Відсутня";
     if (/\b(?:no|without|missing)\s+(?:SSD|HDD|storage|hard drive)\b|\b(?:SSD|HDD|storage)\s+(?:removed|not included)\b/i.test(source)) out.storage = "Відсутній";
     return out;
@@ -32,10 +36,10 @@
     }
     const description = sources.filter(source => source.kind !== "title").map(source => source.text).join("\n");
     const checks = [
-      { label: "Стан батареї", found: /\b(?:battery.{0,60}(?:\d+\s*%|health|cycles?|dead|swollen|holds?\s+(?:a\s+)?charge)|cycle count|full charge capacity)/i.test(description), question: "Could you share the battery health percentage and cycle count, or a battery report?" },
-      { label: "BIOS / MDM / Autopilot", found: /\b(?:bios|uefi).{0,30}(?:password|lock)/i.test(description) && /\b(?:mdm|autopilot|activation lock).{0,30}(?:no|not|free|removed|locked)|\b(?:no|without).{0,15}(?:mdm|autopilot|activation lock)/i.test(description), question: "Is this laptop free of BIOS/UEFI passwords, MDM, Windows Autopilot and activation locks?" },
-      { label: "Зарядний пристрій", found: /\b(?:charger|ac adapter|power adapter|power cord)\b/i.test(description), question: "Is a compatible charger included, and what is its wattage?" },
-      { label: "Стан екрана", found: /\b(?:screen|display|lcd|pixels).{0,70}(?:crack|damage|spot|line|work|good|perfect)|\b(?:no|without).{0,20}(?:cracks|dead pixels)/i.test(description), question: "Does the screen have any cracks, dead pixels, bright spots or lines?" },
+      { label: "Батарея", found: /\b(?:battery.{0,60}(?:\d+\s*%|health|cycles?|dead|swollen|holds?\s+(?:a\s+)?charge)|cycle count|full charge capacity)/i.test(description), question: "Could you share the battery health percentage and cycle count, or a battery report?" },
+      { label: "BIOS / MDM", found: /\b(?:bios|uefi).{0,30}(?:password|lock)/i.test(description) && /\b(?:mdm|autopilot|activation lock).{0,30}(?:no|not|free|removed|locked)|\b(?:no|without).{0,15}(?:mdm|autopilot|activation lock)/i.test(description), question: "Is this laptop free of BIOS/UEFI passwords, MDM, Windows Autopilot and activation locks?" },
+      { label: "Зарядка", found: /\b(?:charger|ac adapter|power adapter|power cord)\b/i.test(description), question: "Is a compatible charger included, and what is its wattage?" },
+      { label: "Екран", found: /\b(?:screen|display|lcd|pixels).{0,70}(?:crack|damage|spot|line|work|good|perfect)|\b(?:no|without).{0,20}(?:cracks|dead pixels)/i.test(description), question: "Does the screen have any cracks, dead pixels, bright spots or lines?" },
       { label: "Клавіатура й порти", found: /\b(?:keyboard|keys).{0,50}(?:work|test|functional)/i.test(description) && /\bports?.{0,50}(?:work|test|functional)/i.test(description), question: "Have all keys, USB ports and charging ports been tested and confirmed working?" }
     ];
     const questions = checks.filter(check => !check.found).map(check => check.question);

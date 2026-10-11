@@ -4,6 +4,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+const { contentScripts, launchOptions } = require('./browser-helpers.cjs');
 const fixedRoot = path.resolve(__dirname, '..');
 
 async function check(browser, root, expectMismatch) {
@@ -34,7 +35,7 @@ async function check(browser, root, expectMismatch) {
       document.body.append(frame);
       frame.src = 'https://itm.ebaydesc.com/?item=123456789012';
     });
-    for (const name of ['core.js', 'inspection.js', 'translation.js', 'content.js']) await page.addScriptTag({ path: path.join(root, name) });
+    for (const name of contentScripts(root)) await page.addScriptTag({ path: path.join(root, name) });
     await page.waitForSelector('#ebay-laptop-helper-item-panel');
     await page.waitForTimeout(700);
     const mismatches = consoleErrors.filter(text => /target origin|recipient window.s origin/i.test(text));
@@ -63,7 +64,7 @@ async function check(browser, root, expectMismatch) {
   } finally { release(); await context.close(); }
 }
 (async () => {
-  const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_EXECUTABLE ? { executablePath: process.env.CHROME_EXECUTABLE } : {}) });
+  const browser = await chromium.launch(launchOptions());
   try {
     if (process.argv[2]) await check(browser, path.resolve(process.argv[2]), true);
     await check(browser, fixedRoot, false);
