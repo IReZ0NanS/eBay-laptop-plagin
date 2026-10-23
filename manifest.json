@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "eBay Laptop Helper",
   "description": "Рахує орієнтовну повну ціну, фарбує й фільтрує ноутбуки, читає й перекладає опис продавця та шукає аналоги на OLX і SOLD.",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "permissions": [
     "storage"
   ],

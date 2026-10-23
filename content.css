@@ -32,7 +32,9 @@ html:not(.ebay-helper-reveal-filtered) [data-ebay-helper-filtered] {
   outline-offset: -2px !important;
 }
 
-.ebay-helper-title {
+/* eBay wraps title text in inner spans (e.g. .su-styled-text) with their own color/weight. */
+.ebay-helper-title,
+.ebay-helper-title *:not([data-ebay-helper-owned]) {
   color: var(--ebay-helper-title-color, var(--ebay-helper-accent)) !important;
   font-weight: 700 !important;
 }
